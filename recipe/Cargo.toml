@@ -1,0 +1,13 @@
+[package]
+name = "recipers"
+version = "0.1.0"
+edition = "2021"
+
+
+
+[dependencies]
+
+
+[dev-dependencies]
+test-case = "3.0.0"
+spucky = {path = "../spucky" }
