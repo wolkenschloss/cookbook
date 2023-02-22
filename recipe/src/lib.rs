@@ -28,9 +28,19 @@ pub enum LexError {
     InvalidChar(char),
 }
 
+#[macro_export]
+macro_rules! rat {
+    ($n:expr, $d:expr) => {
+        Rational::new($n, $d)
+    };
+    ($n:expr) => {
+        Rational::new($n, 1)
+    };
+}
+
 impl Rational {
-    const ONE: Rational = Self::new(1, 1);
-    const ZERO: Rational = Self::new(0, 1);
+    pub const ONE: Rational = Self::new(1, 1);
+    pub const ZERO: Rational = Self::new(0, 1);
 
     pub const fn new(numerator: i64, denominator: i64) -> Rational {
         if denominator == 0 {
@@ -38,21 +48,25 @@ impl Rational {
         }
 
         let gcd = gcd(numerator, denominator);
-        Rational { numerator: numerator / gcd, denominator: denominator / gcd }
+        let sign = (numerator * denominator).signum();
+        Rational {
+            numerator: sign * (numerator / gcd).abs(),
+            denominator: (denominator / gcd).abs(),
+        }
     }
 
     fn normalize(self) -> Self {
         let gcd = gcd(self.numerator, self.denominator);
+        let sign = (self.numerator * self.denominator).signum();
         Rational {
-            numerator: self.numerator / gcd,
-            denominator: self.denominator / gcd,
+            numerator: sign * (self.numerator / gcd).abs(),
+            denominator: (self.denominator / gcd).abs(),
         }
     }
 
     pub fn tokenize(input: &str) -> Result<Vec<Token>, LexError> {
         let mut result: Vec<Token> = Vec::new();
         let mut current_number = String::new();
-
 
         for c in input.chars() {
             if !current_number.is_empty() && !(c >= '0' && c <= '9') {
@@ -89,7 +103,6 @@ impl Rational {
 
         Ok(result)
     }
-
 
     /// This function parses a rational number
     ///
@@ -155,7 +168,7 @@ impl Rational {
                     *tokens = &tokens[1..];
                     Ok(n)
                 }
-                _ => Err(RationalParseError::NumberExpected)
+                _ => Err(RationalParseError::NumberExpected),
             };
         }
 
@@ -176,9 +189,7 @@ impl Rational {
 
         fn parse_without_sign(tokens: &[Token]) -> Result<Rational, RationalParseError> {
             let mut tokens = tokens;
-            let numerator = {
-                parse_number(&mut tokens)?
-            };
+            let numerator = { parse_number(&mut tokens)? };
 
             let denominator = parse_fraction(&mut tokens)?;
             Ok(Rational::new(numerator, denominator))
@@ -186,7 +197,7 @@ impl Rational {
 
         match tokens[0] {
             Token::Sign(c) => parse_with_sign(c, &tokens[1..]),
-            _ => parse_without_sign(tokens)
+            _ => parse_without_sign(tokens),
         }
     }
 }
@@ -280,7 +291,6 @@ impl fmt::Display for Rational {
     }
 }
 
-
 impl FromStr for Rational {
     type Err = RationalParseError;
 
@@ -293,7 +303,6 @@ impl FromStr for Rational {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use test_case::test_case;
@@ -303,69 +312,196 @@ mod test {
     use super::*;
 
     spec! {
-        my_suite {
-            case a {
-                let a = 1;
-                let want = 1;
+        rational_add {
+            case case1 {
+                let (a, b, want) = (rat!(1, 2), rat!(1, 2), rat!(1, 1));
             }
 
-            let got = a * a;
+            case case2 {
+                let (a, b, want) = (rat!(2), rat!(3), rat!(5));
+            }
+
+            case case3 {
+                let (a, b, want) = (rat!(1, 2), rat!(-1, 3), rat!(1, 6));
+            }
+
+            let got = a + b;
+            assert_eq!(want, got)
+        }
+    }
+
+    spec! {
+        rational_sub {
+            case case1 {
+                let description = "1/2 - 1/2 = 0";
+                let (a, b , want) = (rat!(1, 2), rat!(1, 2), rat!(0));
+            }
+
+            case case2 {
+                let description = "2 - -3 = 5";
+                let (a, b, want) = (rat!(2), rat!(-3), rat!(5));
+            }
+
+            case case3 {
+                let description = "1/3 - 1/5 = 2/15";
+                let (a, b, want) = (rat!(1, 3), rat!(1, 5), rat!(2, 15));
+            }
+
+            case case4 {
+                let description = "-1/3 - 1/5 = -8/15";
+                let (a, b, want) = (rat!(-1,3), rat!(1, 5), rat!(-8, 15));
+            }
+
+            case case5 {
+                let description = "1/3 - -1/5 = 8/15";
+                let (a, b, want) = (rat!(1, 3), rat!(-1, 5), rat!(8, 15));
+            }
+
+            case case6 {
+                let description = "2/3 - 1/2 = 1/6";
+                let (a, b, want) = (rat!(2, 3), rat!(1, 2), rat!(1, 6));
+            }
+
+
+            let got = a - b;
+            assert_eq!(want, got, "want {}, got {} in {}", want, got, description);
+        }
+    }
+
+    spec! {
+        rational_mul {
+            case case1 {
+                let (a, b, want) = (rat!(1, 2), rat!(1, 2), rat!(1, 4));
+            }
+
+            case case2 {
+                let (a, b, want) = (rat!(2), rat!(3), rat!(6));
+            }
+
+            case case3 {
+                let (a, b, want) = (rat!(1, 3), rat!(1, 5), rat!(1, 15));
+            }
+
+            case case4 {
+                let (a, b, want) = (rat!(1, 3), rat!(-1, 5), rat!(-1, 15));
+            }
+
+            case case5 {
+                let (a, b, want) = (rat!(1, 2), rat!(3, 4), rat!(3, 8));
+            }
+
+
+            let got = a * b;
             assert_eq!(want, got);
         }
     }
 
-    mod inner_test {
-        #[test]
-        fn some_inner_test() {}
+    spec! {
+        rational_div {
+            case case1 {
+                let (a, b, want) = (rat!(8), rat!(2), rat!(4));
+            }
+
+            case case2 {
+                let (a, b, want) = (rat!(2, 3), rat!(4, 5), rat!(5, 6));
+            }
+            case case3 {
+                let (a, b, want) = (rat!(-2, 3), rat!(4, 5), rat!(-5, 6));
+            }
+
+            case case4 {
+                let (a, b, want) = (rat!(2, 3), rat!(-4, 5), rat!(-5, 6));
+            }
+
+            case case5 {
+                let (a, b, want) = (rat!(1, 2), rat!(3, 4), rat!(2, 3));
+            }
+
+            let got = a / b;
+            assert_eq!(want, got);
+        }
     }
 
-    #[test]
-    fn add_rational() {
-        let a = Rational::ONE;
-        let b = Rational::new(1, 2);
+    spec! {
+        rational_eq {
+            case case1 {
+                let (a, b) = (rat!(2, 4), rat!(1, 2));                
+            }
 
-        assert_eq!(a + b, Rational::new(3, 2));
+            case case2 {
+                let (a, b) = (rat!(4, 4), rat!(1));                
+            }
+
+            case case3 {
+                let (a, b) = (rat!(5, 2), rat!(5, 2));                
+            }
+
+            case case4 {
+                let (a, b) = (rat!(-5, 2), rat!(5, -2));                
+            }
+
+            assert!(a == b)
+        }
     }
 
-    #[test]
-    fn sub_rational() {
-        let a = Rational::ONE;
-        let b = Rational::new(1, 2);
+    spec! {
+        rational_ne {   
+            case case1 {
+                let (a, b) = (rat!(123, 124), rat!(1, 2));                
+            }
 
-        assert_eq!(a - b, Rational::new(1, 2));
+            case case2 {
+                let (a, b) = (rat!(1), rat!(2));                
+            }
+
+            assert!(a!= b)
+        }
     }
 
-    #[test]
-    fn mul_rational() {
-        let a = Rational::ONE;
-        let b = Rational::new(1, 2);
+    spec! {
+        rational_from {
+            case case1 {
+                let (input, want) = ("0", rat!(0));
+            }
 
-        assert_eq!(a * b, Rational::new(1, 2));
-    }
+            case case2 {
+                let (input, want) = ("42", rat!(42));                
+            }
 
-    #[test]
-    fn div_rational() {
-        let a = Rational::ONE;
-        let b = Rational::new(1, 2);
+            case case3 {
+                let (input, want) = ("5/13", rat!(5, 13));                
+            }
 
-        assert_eq!(a / b, Rational::new(2, 1));
+            case case4 {
+                let (input, want) = ("-5/13", rat!(-5, 13));   
+            }
+
+            let result =  if let Ok(got) = Rational::from_str(input) {
+                assert_eq!(want, got);
+                Ok(())
+            } else {
+                Err(())
+            };
+
+            result.unwrap()
+        }
     }
 
     #[test]
     fn from_int() {
         let a = Rational::from(42);
-        assert_eq!(a, Rational::new(42, 1))
+        assert_eq!(a, rat!(42, 1))
     }
 
     #[test]
     fn into_rational() {
         let a: Rational = 42.into();
-        assert_eq!(a, Rational::new(42, 1))
+        assert_eq!(a, rat!(42, 1))
     }
 
     #[test]
     fn into_rational_implicit() {
-        assert_eq!(Rational::new(42, 1), 42.into())
+        assert_eq!(rat!(42, 1), 42.into())
     }
 
     #[test]
@@ -376,8 +512,14 @@ mod test {
         }
 
         let testcases = [
-            Testcase { subject: Rational::new(1, 2), want: "1/2".into() },
-            Testcase { subject: Rational::new(-3, 4), want: "-3/4".to_string() }
+            Testcase {
+                subject: rat!(1, 2),
+                want: "1/2".into(),
+            },
+            Testcase {
+                subject: rat!(-3, 4),
+                want: "-3/4".to_string(),
+            },
         ];
 
         for testcase in testcases {
@@ -386,6 +528,21 @@ mod test {
         }
     }
 
+    spec! {
+        xxx {
+            case one_half {
+                let subject = rat!(1, 2);
+                let want = "1/2";
+            }
+
+            case minus_one_third {
+                let subject = rat!(-1, 3);
+                let want = "-1/3";
+            }
+
+            assert_eq!(subject.to_string(), want)
+        }
+    }
 
     #[test]
     fn parse_rational2() {
@@ -400,17 +557,20 @@ mod test {
         }
 
         // Given
-        let testcases = vec![Testcase {
-            name: "one",
-            subject: Subject { input: "1" },
-            want: Rational::new(1, 1),
-        }, Testcase {
-            name: "two",
-            subject: Subject { input: "2" },
-            want: Rational::new(2, 1),
-        }];
+        let testcases = vec![
+            Testcase {
+                name: "one",
+                subject: Subject { input: "1" },
+                want: rat!(1, 1),
+            },
+            Testcase {
+                name: "two",
+                subject: Subject { input: "2" },
+                want: rat!(2, 1),
+            },
+        ];
 
-        // let want = vec![Rational::new(1, 1), Rational::new(2, 1)];
+        // let want = vec![rat!(1, 1), Rational::new(2, 1)];
 
         fn when(testcase: &Subject) -> Result<Rational, RationalParseError> {
             testcase.input.parse()
@@ -419,11 +579,13 @@ mod test {
         fn then((got, want): (Result<Rational, RationalParseError>, &Rational)) -> bool {
             match got {
                 Ok(r) => r == *want,
-                Err(_) => false
+                Err(_) => false,
             }
         }
 
-        let retval: Vec<bool> = testcases.iter().map(|t| &t.subject)
+        let retval: Vec<bool> = testcases
+            .iter()
+            .map(|t| &t.subject)
             // .map(|x| -> Result<Rational, RationalParseError>{
             //     x.input.parse()
             // })
@@ -435,16 +597,15 @@ mod test {
         assert!(retval.into_iter().all(|r| r == true))
     }
 
-
-    #[test_case("1" => Rational::new(1, 1); "1")]
-    #[test_case("+1" => Rational::new(1, 1); "plus 1")]
-    #[test_case("-1" => Rational::new(- 1, 1); "minus 1")]
-    #[test_case("+42" => Rational::new(42, 1); "plus 42")]
-    #[test_case("-42" => Rational::new(- 42, 1); "minus 42")]
-    #[test_case("1/2" => Rational::new(1, 2); "a half")]
-    #[test_case("+1/2" => Rational::new(1, 2); "plus a half")]
-    #[test_case("-3/4" => Rational::new(- 3, 4); "minus three quarters")]
-    #[test_case("1111/2222" => Rational::new(1111, 2222); "big")]
+    #[test_case("1" => rat!(1, 1); "1")]
+    #[test_case("+1" => rat!(1, 1); "plus 1")]
+    #[test_case("-1" => rat!(- 1, 1); "minus 1")]
+    #[test_case("+42" => rat!(42, 1); "plus 42")]
+    #[test_case("-42" => rat!(- 42, 1); "minus 42")]
+    #[test_case("1/2" => rat!(1, 2); "a half")]
+    #[test_case("+1/2" => rat!(1, 2); "plus a half")]
+    #[test_case("-3/4" => rat!(- 3, 4); "minus three quarters")]
+    #[test_case("1111/2222" => rat!(1111, 2222); "big")]
     fn parse_rational(subject: &str) -> Rational {
         subject.parse().expect("Parsing must be successful")
     }

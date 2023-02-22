@@ -1,0 +1,38 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "My Task",
+            "type": "shell",
+            "command": "echo Hello",
+            "problemMatcher": []
+        },
+        {
+            "detail": "Baut alles",
+            "type": "cargo",
+            "command": "build",
+            "args": ["--release"],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build",
+            "label": "cookbook: cargo build"
+        },
+        {
+            "detail": "Führt alle Tests des Projekts aus.",
+            "type": "cargo",
+            "command": "test",
+            "args": ["--", "-q"],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "label": "cookbook: cargo test"
+        }
+    ]
+}
