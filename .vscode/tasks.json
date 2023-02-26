@@ -13,7 +13,9 @@
             "detail": "Baut alles",
             "type": "cargo",
             "command": "build",
-            "args": ["--release"],
+            "args": [
+                "--release"
+            ],
             "problemMatcher": [
                 "$rustc"
             ],
@@ -23,8 +25,15 @@
         {
             "detail": "Führt alle Tests des Projekts aus.",
             "type": "cargo",
-            "command": "test",
-            "args": ["--", "-q"],
+            "command": "nextest",
+            
+            "args": [
+                "run",
+                "--status-level", "retry"
+            ],
+            "presentation": {
+                "reveal": "always"
+            },
             "problemMatcher": [
                 "$rustc"
             ],

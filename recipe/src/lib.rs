@@ -270,7 +270,7 @@ const fn gcd(m: i64, n: i64) -> i64 {
 impl fmt::Display for Rational {
     /// Displays a rational number as string
     ///
-    /// If the rational number has a denominator other than 0, only the numerator is output as a character string.
+    /// If the rational number has a denominator other than 1, only the numerator is output as a character string.
     /// Otherwise the rational number is output as a fraction in the form *numerator/denominator*
     ///
     /// # Examples
@@ -425,19 +425,19 @@ mod test {
     spec! {
         rational_eq {
             case case1 {
-                let (a, b) = (rat!(2, 4), rat!(1, 2));                
+                let (a, b) = (rat!(2, 4), rat!(1, 2));
             }
 
             case case2 {
-                let (a, b) = (rat!(4, 4), rat!(1));                
+                let (a, b) = (rat!(4, 4), rat!(1));
             }
 
             case case3 {
-                let (a, b) = (rat!(5, 2), rat!(5, 2));                
+                let (a, b) = (rat!(5, 2), rat!(5, 2));
             }
 
             case case4 {
-                let (a, b) = (rat!(-5, 2), rat!(5, -2));                
+                let (a, b) = (rat!(-5, 2), rat!(5, -2));
             }
 
             assert!(a == b)
@@ -445,13 +445,13 @@ mod test {
     }
 
     spec! {
-        rational_ne {   
+        rational_ne {
             case case1 {
-                let (a, b) = (rat!(123, 124), rat!(1, 2));                
+                let (a, b) = (rat!(123, 124), rat!(1, 2));
             }
 
             case case2 {
-                let (a, b) = (rat!(1), rat!(2));                
+                let (a, b) = (rat!(1), rat!(2));
             }
 
             assert!(a!= b)
@@ -465,15 +465,15 @@ mod test {
             }
 
             case case2 {
-                let (input, want) = ("42", rat!(42));                
+                let (input, want) = ("42", rat!(42));
             }
 
             case case3 {
-                let (input, want) = ("5/13", rat!(5, 13));                
+                let (input, want) = ("5/13", rat!(5, 13));
             }
 
             case case4 {
-                let (input, want) = ("-5/13", rat!(-5, 13));   
+                let (input, want) = ("-5/13", rat!(-5, 13));
             }
 
             let result =  if let Ok(got) = Rational::from_str(input) {
@@ -597,17 +597,116 @@ mod test {
         assert!(retval.into_iter().all(|r| r == true))
     }
 
-    #[test_case("1" => rat!(1, 1); "1")]
-    #[test_case("+1" => rat!(1, 1); "plus 1")]
-    #[test_case("-1" => rat!(- 1, 1); "minus 1")]
-    #[test_case("+42" => rat!(42, 1); "plus 42")]
-    #[test_case("-42" => rat!(- 42, 1); "minus 42")]
-    #[test_case("1/2" => rat!(1, 2); "a half")]
-    #[test_case("+1/2" => rat!(1, 2); "plus a half")]
-    #[test_case("-3/4" => rat!(- 3, 4); "minus three quarters")]
-    #[test_case("1111/2222" => rat!(1111, 2222); "big")]
-    fn parse_rational(subject: &str) -> Rational {
-        subject.parse().expect("Parsing must be successful")
+    spec! {
+        parse_rational {
+            case case1 {
+                let input = "1";
+                let want = rat!(1);
+            }
+
+            case case2 {
+                let input = "+1";
+                let want = rat!(1);
+            }
+
+            case case3 {
+                let input = "-1";
+                let want = rat!(-1);
+            }
+            case case4 {
+                let input = "42";
+                let want = rat!(42);
+            }
+
+            case case5 {
+                let input = "+42";
+                let want = rat!(42);
+            }
+
+            case case6 {
+                let input = "-42";
+                let want = rat!(-42);
+            }
+
+            case case7 {
+                let input = "1/2";
+                let want = rat!(1, 2);
+            }
+
+            case case8 {
+                let input = "+1/2";
+                let want = rat!(1, 2);
+            }
+
+            case case9 {
+                let input = "-1/2";
+                let want = rat!(-1, 2);
+            }
+
+            case case10 {
+                let input = "1111/2222";
+                let want = rat!(1111, 2222);
+            }
+
+            case case11 {
+                let input = "+123/124";
+                let want = rat!(123, 124);
+            }
+
+            case case12 {
+                let input = "-125/126";
+                let want = rat!(-125, 126);
+            }
+
+            let got = input.parse().unwrap();
+            assert_eq!(want, got, "want {:?}, got {:?} for input '{}'", want, got, input)
+        }
+
+    }
+
+    spec! {
+        parse_error {
+            case case1 {
+                let input = "";
+                let want = RationalParseError::UnexpectedEndOfLine;
+            }
+
+            case case2 {
+                let input = "+";
+                let want = RationalParseError::NumberExpected;
+            }
+
+            case case3 {
+                let input = "-";
+                let want = RationalParseError::NumberExpected;
+            }
+
+            case case4 {
+                let input = "+-";
+                let want = RationalParseError::NumberExpected;
+            }
+
+            case case5 {
+                let input = "1/";
+                let want = RationalParseError::NumberExpected;
+            }
+
+            case case6 {
+                let input = "1/-";
+                let want = RationalParseError::NumberExpected;
+            }
+
+            case case7 {
+                let input = "1/+";
+                let want = RationalParseError::NumberExpected;
+            }
+
+            let got: Result<Rational, RationalParseError> = input.parse();
+            match got {
+                Ok(r) => panic!("expected error, got {:?}", r),
+                Err(e) => assert_eq!(e, want),
+            }
+        }
     }
 
     #[test_case("" => RationalParseError::UnexpectedEndOfLine; "when input is empty")]
