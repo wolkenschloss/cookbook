@@ -32,7 +32,8 @@
                 "--status-level", "retry"
             ],
             "presentation": {
-                "reveal": "always"
+                "reveal": "always",
+                "group": "test"
             },
             "problemMatcher": [
                 "$rustc"

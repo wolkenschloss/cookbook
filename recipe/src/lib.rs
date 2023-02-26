@@ -3,16 +3,11 @@ use std::fmt::Formatter;
 use std::ops::{Add, Div, Mul, Sub};
 use std::str::FromStr;
 
+
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Rational {
     numerator: i64,
     denominator: i64,
-}
-
-pub enum Token {
-    Number(i64),
-    Sign(char),
-    Slash,
 }
 
 #[derive(Debug, PartialEq)]
@@ -20,12 +15,7 @@ pub enum RationalParseError {
     UnexpectedEndOfLine,
     InvalidNumber,
     NumberExpected,
-}
-
-#[derive(Debug)]
-pub enum LexError {
-    Overflow,
-    InvalidChar(char),
+    InvalidCharacter(char),
 }
 
 #[macro_export]
@@ -61,143 +51,6 @@ impl Rational {
         Rational {
             numerator: sign * (self.numerator / gcd).abs(),
             denominator: (self.denominator / gcd).abs(),
-        }
-    }
-
-    pub fn tokenize(input: &str) -> Result<Vec<Token>, LexError> {
-        let mut result: Vec<Token> = Vec::new();
-        let mut current_number = String::new();
-
-        for c in input.chars() {
-            if !current_number.is_empty() && !(c >= '0' && c <= '9') {
-                let num: i64 = match current_number.parse() {
-                    Err(_) => return Err(LexError::Overflow),
-                    Ok(v) => v,
-                };
-
-                result.push(Token::Number(num));
-                current_number.clear()
-            }
-
-            let token = match c {
-                '/' => Token::Slash,
-                c @ '+' | c @ '-' => Token::Sign(c),
-                n @ '0'..='9' => {
-                    current_number.push(n);
-                    continue;
-                }
-                c => return Err(LexError::InvalidChar(c)),
-            };
-
-            result.push(token)
-        }
-
-        if !current_number.is_empty() {
-            let num: i64 = match current_number.parse() {
-                Err(_) => return Err(LexError::Overflow),
-                Ok(v) => v,
-            };
-
-            result.push(Token::Number(num))
-        }
-
-        Ok(result)
-    }
-
-    /// This function parses a rational number
-    ///
-    /// # Arguments
-    ///
-    /// * `tokens` A token slice that holds tokens to be parsed
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use recipers::Rational;
-    ///
-    /// let tokens = Rational::tokenize("-1/2").unwrap();
-    /// let r = Rational::parse(&tokens).unwrap();
-    ///
-    /// assert_eq!(r, Rational::new(-1, 2))
-    /// ```
-    ///
-    /// # BNF
-    ///
-    /// ```text
-    /// rational
-    ///  : sign number fraction ;; parse_with_sign
-    ///  | number fraction      ;; parse_without_sign
-    ///  ;
-    ///
-    /// fraction
-    ///   : slash number        ;; parse_fraction
-    ///   | <empty>             ;; parse_empty
-    ///   ;
-    ///
-    /// number
-    ///   : digit+              ;; parse_number
-    /// ```
-    pub fn parse(tokens: &[Token]) -> Result<Rational, RationalParseError> {
-        if tokens.is_empty() {
-            return Err(RationalParseError::UnexpectedEndOfLine);
-        }
-
-        // ggf. Sign als erstes Token:
-        // fn parse_with_sign(tokens: &[Token]) -> Result<Rational, RationalParseError> {
-        //   if let Sign(c) = tokens[0] {
-        //      ...
-        //   }
-        // }
-        fn parse_with_sign(c: char, tokens: &[Token]) -> Result<Rational, RationalParseError> {
-            if c == '-' {
-                let sign = Rational::from(-1);
-                let rational = parse_without_sign(tokens)?;
-                Ok(sign * rational)
-            } else {
-                parse_without_sign(tokens)
-            }
-        }
-
-        fn parse_number(tokens: &mut &[Token]) -> Result<i64, RationalParseError> {
-            if tokens.is_empty() {
-                return Err(RationalParseError::NumberExpected);
-            }
-
-            return match tokens[0] {
-                Token::Number(n) => {
-                    *tokens = &tokens[1..];
-                    Ok(n)
-                }
-                _ => Err(RationalParseError::NumberExpected),
-            };
-        }
-
-        fn parse_fraction(tokens: &mut &[Token]) -> Result<i64, RationalParseError> {
-            let mut tokens = tokens;
-
-            if tokens.is_empty() {
-                return Ok(1);
-            }
-
-            if let Token::Slash = tokens[0] {
-                *tokens = &tokens[1..];
-                parse_number(&mut tokens)
-            } else {
-                Ok(1)
-            }
-        }
-
-        fn parse_without_sign(tokens: &[Token]) -> Result<Rational, RationalParseError> {
-            let mut tokens = tokens;
-            let numerator = { parse_number(&mut tokens)? };
-
-            let denominator = parse_fraction(&mut tokens)?;
-            Ok(Rational::new(numerator, denominator))
-        }
-
-        match tokens[0] {
-            Token::Sign(c) => parse_with_sign(c, &tokens[1..]),
-            _ => parse_without_sign(tokens),
         }
     }
 }
@@ -291,25 +144,85 @@ impl fmt::Display for Rational {
     }
 }
 
+enum ParseState {
+    Q0, // Start
+    Q1(i64), // Sign
+    Q2(i64), // Numerator
+    Q3(i64), // Fraction Bar
+    Q4(Rational), // Denominator
+}
+
 impl FromStr for Rational {
     type Err = RationalParseError;
 
+    // Q = {q0, q1, q2, q3, q4}
+    // Σ = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "+", "-", "/"}
+
+    // δ: Q x Σ -> Q (Übergangsfunktionen)
+    // |Q      |"0"-"9"| "+" oder "-"| "/" |
+    // |-------|-------|-------------|-----|
+    // |q0     | q2    | q1          |     |
+    // |q1     | q2    |             |     |
+    // |q2*    | q2    |             | q3  |
+    // |q3     | q4    |             | q4  |
+    // |q4*    | q4    |             |     |
+    //
+    // F = {q2, q4}
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(tokens) = Rational::tokenize(s) {
-            return Rational::parse(&tokens);
-        } else {
-            Err(RationalParseError::InvalidNumber)
+        let mut state = ParseState::Q0;
+
+        for c in s.chars() {
+            state = match c {
+                '0'..='9' => {
+                    match state {
+                        ParseState::Q0 => ParseState::Q2(c.to_digit(10).unwrap() as i64),
+                        ParseState::Q1(sign) => ParseState::Q2(c.to_digit(10).unwrap() as i64 * sign),
+                        ParseState::Q2(number)=> ParseState::Q2(number.signum() * (number.abs() * 10 + c.to_digit(10).unwrap() as i64)),
+                        ParseState::Q3(number) => ParseState::Q4(
+                            Rational {numerator: number, denominator: (c.to_digit(10).unwrap() as i64)}),
+                        ParseState::Q4(fraction) => ParseState::Q4(
+                            Rational {
+                                numerator: fraction.numerator,
+                                denominator: fraction.denominator * 10 + c.to_digit(10).unwrap() as i64}),
+                    }
+                },
+                '+' => {
+                    match state {
+                        ParseState::Q0 => ParseState::Q1(1),
+                        _ => return Err(RationalParseError::InvalidCharacter(c))
+                    }
+                },
+                '-' => {
+                    match state {
+                        ParseState::Q0 => ParseState::Q1(-1),
+                        _ => return Err(RationalParseError::InvalidCharacter(c))
+                    }
+                }
+                '/' => {
+                    match state {
+                        ParseState::Q2(number) => {ParseState::Q3(number)},
+                        _ => return Err(RationalParseError::InvalidCharacter(c))
+                    }
+                }
+
+                x => return Err(RationalParseError::InvalidCharacter(x)),
+            }
+        }
+
+        match state {
+            ParseState::Q1(_) => Err(RationalParseError::NumberExpected),
+            ParseState::Q2(value) => Ok(Rational::new(value, 1)),
+            ParseState::Q3(_) => Err(RationalParseError::NumberExpected),
+            ParseState::Q4(value) => Ok(value.normalize()),
+            _ => Err(RationalParseError::UnexpectedEndOfLine),
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use test_case::test_case;
-
-    use spucky::spec;
-
     use super::*;
+    use spucky::spec;
 
     spec! {
         rational_add {
@@ -683,7 +596,7 @@ mod test {
 
             case case4 {
                 let input = "+-";
-                let want = RationalParseError::NumberExpected;
+                let want = RationalParseError::InvalidCharacter('-');
             }
 
             case case5 {
@@ -693,32 +606,30 @@ mod test {
 
             case case6 {
                 let input = "1/-";
-                let want = RationalParseError::NumberExpected;
+                let want = RationalParseError::InvalidCharacter('-');
             }
 
             case case7 {
                 let input = "1/+";
-                let want = RationalParseError::NumberExpected;
+                let want = RationalParseError::InvalidCharacter('+');
+            }
+
+            case case8 {
+                let input = "1/a";
+                let want = RationalParseError::InvalidCharacter('a');
+            }
+
+            case case9 {
+                let input = "1//";
+                let want = RationalParseError::InvalidCharacter('/');
             }
 
             let got: Result<Rational, RationalParseError> = input.parse();
             match got {
                 Ok(r) => panic!("expected error, got {:?}", r),
-                Err(e) => assert_eq!(e, want),
+                Err(got) => assert_eq!(want, got),
             }
         }
     }
 
-    #[test_case("" => RationalParseError::UnexpectedEndOfLine; "when input is empty")]
-    #[test_case("+" => RationalParseError::NumberExpected; "when input contains a plus sign only")]
-    #[test_case("-" => RationalParseError::NumberExpected; "when input contains a minus sign only")]
-    #[test_case("+-" => RationalParseError::NumberExpected; "when input contains a plus and minus sign only")]
-    #[test_case("1/" => RationalParseError::NumberExpected; "when input ends with a slash")]
-    #[test_case("1/-" => RationalParseError::NumberExpected; "when input contains no number after slash")]
-    #[test_case("1/-" => RationalParseError::NumberExpected; "when input contains slash only")]
-    fn rational_parse_error2(input: &str) -> RationalParseError {
-        let tokens = Rational::tokenize(input).unwrap();
-        let result = Rational::parse(&tokens);
-        return result.expect_err("expecting error");
-    }
 }
