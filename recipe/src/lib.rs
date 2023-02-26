@@ -155,19 +155,44 @@ enum ParseState {
 impl FromStr for Rational {
     type Err = RationalParseError;
 
-    // Q = {q0, q1, q2, q3, q4}
-    // Σ = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "+", "-", "/"}
-
-    // δ: Q x Σ -> Q (Übergangsfunktionen)
-    // |Q      |"0"-"9"| "+" oder "-"| "/" |
-    // |-------|-------|-------------|-----|
-    // |q0     | q2    | q1          |     |
-    // |q1     | q2    |             |     |
-    // |q2*    | q2    |             | q3  |
-    // |q3     | q4    |             | q4  |
-    // |q4*    | q4    |             |     |
-    //
-    // F = {q2, q4}
+    /// Parses a rational number from a string.
+    ///
+    /// If parsing succeeds, returns the parsed rational number inside
+    /// Ok, otherwise when the string is ill-formed return an error of
+    /// type RationalParseError inside Err.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use recipers::Rational;
+    /// use std::str::FromStr;
+    /// 
+    /// let number = Rational::from_str("1/2").unwrap();
+    /// 
+    /// assert_eq!(number, Rational::new(1, 2));
+    /// ```
+    ///
+    /// ```
+    /// use recipers::Rational;
+    /// 
+    /// let number: Rational = "-1/2".parse().unwrap();
+    /// assert_eq!(number, Rational::new(-1, 2));
+    /// 
+    /// ```
+    /// # DFA definition
+    /// Q = {q0, q1, q2, q3, q4}
+    /// Σ = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "+", "-", "/"}
+    ///
+    /// δ: Q x Σ -> Q (Übergangsfunktionen)
+    /// |Q      |"0"-"9"| "+" oder "-"| "/" |
+    /// |-------|-------|-------------|-----|
+    /// |q0     | q2    | q1          |     |
+    /// |q1     | q2    |             |     |
+    /// |q2*    | q2    |             | q3  |
+    /// |q3     | q4    |             | q4  |
+    /// |q4*    | q4    |             |     |
+    ///
+    /// F = {q2, q4}
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut state = ParseState::Q0;
 
@@ -439,75 +464,6 @@ mod test {
             let got = testcase.subject.to_string();
             assert_eq!(got, testcase.want)
         }
-    }
-
-    spec! {
-        xxx {
-            case one_half {
-                let subject = rat!(1, 2);
-                let want = "1/2";
-            }
-
-            case minus_one_third {
-                let subject = rat!(-1, 3);
-                let want = "-1/3";
-            }
-
-            assert_eq!(subject.to_string(), want)
-        }
-    }
-
-    #[test]
-    fn parse_rational2() {
-        struct Subject<'a> {
-            input: &'a str,
-        }
-
-        struct Testcase<'a> {
-            name: &'static str,
-            subject: Subject<'a>,
-            want: Rational,
-        }
-
-        // Given
-        let testcases = vec![
-            Testcase {
-                name: "one",
-                subject: Subject { input: "1" },
-                want: rat!(1, 1),
-            },
-            Testcase {
-                name: "two",
-                subject: Subject { input: "2" },
-                want: rat!(2, 1),
-            },
-        ];
-
-        // let want = vec![rat!(1, 1), Rational::new(2, 1)];
-
-        fn when(testcase: &Subject) -> Result<Rational, RationalParseError> {
-            testcase.input.parse()
-        }
-
-        fn then((got, want): (Result<Rational, RationalParseError>, &Rational)) -> bool {
-            match got {
-                Ok(r) => r == *want,
-                Err(_) => false,
-            }
-        }
-
-        let retval: Vec<bool> = testcases
-            .iter()
-            .map(|t| &t.subject)
-            // .map(|x| -> Result<Rational, RationalParseError>{
-            //     x.input.parse()
-            // })
-            .map(when)
-            .zip(testcases.iter().map(|t| &t.want))
-            .map(then)
-            .collect();
-
-        assert!(retval.into_iter().all(|r| r == true))
     }
 
     spec! {
