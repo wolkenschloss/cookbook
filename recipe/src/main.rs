@@ -16,6 +16,3 @@ struct Ingredient {
     quantity: Rational,
     unit: String,
 }
-
-
-

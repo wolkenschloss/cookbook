@@ -1,8 +1,12 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
 use std::ops::{Add, Div, Mul, Sub};
 use std::str::FromStr;
 
+
+#[macro_use]
+extern crate lazy_static;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Rational {
@@ -150,6 +154,37 @@ enum ParseState {
     Q2(i64), // Numerator
     Q3(i64), // Fraction Bar
     Q4(Rational), // Denominator
+    Q5(Rational), // Unicode Symbol
+}
+
+lazy_static! {
+    static ref FRACTION_MAP: HashMap<char, Rational> = {
+        let mut map = HashMap::new();
+        map.insert('\u{00bd}', rat!(1, 2));
+        map.insert('\u{2153}', rat!(1, 3));
+        map.insert('\u{2154}', rat!(2, 3));
+        map.insert('\u{00bc}', rat!(1, 4));
+        map.insert('\u{00be}', rat!(3, 4));
+        map.insert('\u{2155}', rat!(1, 5));
+        map.insert('\u{2156}', rat!(2, 5));
+        map.insert('\u{2157}', rat!(3, 5));
+        map.insert('\u{2158}', rat!(4, 5));
+        map.insert('\u{2159}', rat!(1, 6));
+        map.insert('\u{215a}', rat!(5, 6));
+        map.insert('\u{2150}', rat!(1, 7));
+        map.insert('\u{215b}', rat!(1, 8));
+        map.insert('\u{215c}', rat!(3, 8));
+        map.insert('\u{215d}', rat!(5, 8));
+        map.insert('\u{215e}', rat!(7, 8));
+        map.insert('\u{2151}', rat!(1, 9));
+        map.insert('\u{2152}', rat!(1, 10));
+    
+        map
+    };
+}
+
+fn is_fraction_symbol(c: &char) -> bool {    
+    FRACTION_MAP.contains_key(c)
 }
 
 impl FromStr for Rational {
@@ -184,13 +219,14 @@ impl FromStr for Rational {
     /// Σ = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "+", "-", "/"}
     ///
     /// δ: Q x Σ -> Q (Übergangsfunktionen)
-    /// |Q      |"0"-"9"| "+" oder "-"| "/" |
-    /// |-------|-------|-------------|-----|
-    /// |q0     | q2    | q1          |     |
-    /// |q1     | q2    |             |     |
-    /// |q2*    | q2    |             | q3  |
-    /// |q3     | q4    |             | q4  |
-    /// |q4*    | q4    |             |     |
+    /// |Q      |"0"-"9"| "½"-"⅒" | "+" oder "-"| "/" |
+    /// |-------|-------|----------|-------------|-----|
+    /// |q0     | q2    | q5       | q1          |     |
+    /// |q1     | q2    | q5       |             |     |
+    /// |q2*    | q2    |          |             | q3  |
+    /// |q3     | q4    |          |             | q4  |
+    /// |q4*    | q4    |          |             |     |
+    /// |q5*    |       |          |             |     |
     ///
     /// F = {q2, q4}
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -198,6 +234,14 @@ impl FromStr for Rational {
 
         for c in s.chars() {
             state = match c {
+                f if is_fraction_symbol(&c) => {
+                    let val = FRACTION_MAP.get(&f).expect("character must be a fraction");
+                    match state {
+                        ParseState::Q0 => ParseState::Q5(*val),
+                        ParseState::Q1(sign) => ParseState::Q5(*val * sign.into()),
+                        _ => return Err(RationalParseError::InvalidCharacter(c))
+                    }
+                }
                 '0'..='9' => {
                     match state {
                         ParseState::Q0 => ParseState::Q2(c.to_digit(10).unwrap() as i64),
@@ -209,6 +253,7 @@ impl FromStr for Rational {
                             Rational {
                                 numerator: fraction.numerator,
                                 denominator: fraction.denominator * 10 + c.to_digit(10).unwrap() as i64}),
+                        _ => return Err(RationalParseError::InvalidCharacter(c)),
                     }
                 },
                 '+' => {
@@ -239,6 +284,7 @@ impl FromStr for Rational {
             ParseState::Q2(value) => Ok(Rational::new(value, 1)),
             ParseState::Q3(_) => Err(RationalParseError::NumberExpected),
             ParseState::Q4(value) => Ok(value.normalize()),
+            ParseState::Q5(value) => Ok(value),
             _ => Err(RationalParseError::UnexpectedEndOfLine),
         }
     }
@@ -413,7 +459,7 @@ mod test {
             case case4 {
                 let (input, want) = ("-5/13", rat!(-5, 13));
             }
-
+            
             let result =  if let Ok(got) = Rational::from_str(input) {
                 assert_eq!(want, got);
                 Ok(())
@@ -525,6 +571,21 @@ mod test {
             case case12 {
                 let input = "-125/126";
                 let want = rat!(-125, 126);
+            }
+
+            case case13 {
+                let input = "\u{00bd}";
+                let want = rat!(1, 2);
+            }
+
+            case case14{
+                let input = "+\u{2153}";
+                let want = rat!(1, 3);
+            }
+
+            case case15 {
+                let input = "-\u{2154}";
+                let want = rat!(-2, 3);
             }
 
             let got = input.parse().unwrap();

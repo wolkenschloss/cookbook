@@ -6,7 +6,7 @@ edition = "2021"
 
 
 [dependencies]
-
+lazy_static = "1.4"
 
 [dev-dependencies]
 spucky = {path = "../spucky" }
