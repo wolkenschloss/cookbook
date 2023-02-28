@@ -3,6 +3,7 @@ use std::ops::{Add, Div, Mul, Sub};
 
 use std::fmt;
 
+mod format;
 mod parse;
 
 #[macro_use]
