@@ -25,12 +25,8 @@
         {
             "detail": "Führt alle Tests des Projekts aus.",
             "type": "cargo",
-            "command": "nextest",
-            
-            "args": [
-                "run",
-                "--status-level", "retry"
-            ],
+            "command": "test",
+            "args": [],
             "presentation": {
                 "reveal": "always",
                 "group": "test"

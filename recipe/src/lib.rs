@@ -1,7 +1,4 @@
-use std::fmt::Formatter;
 use std::ops::{Add, Div, Mul, Sub};
-
-use std::fmt;
 
 mod format;
 mod parse;
@@ -113,30 +110,6 @@ const fn gcd(m: i64, n: i64) -> i64 {
             let tmp = m;
             m = n % m;
             n = tmp
-        }
-    }
-}
-
-impl fmt::Display for Rational {
-    /// Displays a rational number as string
-    ///
-    /// If the rational number has a denominator other than 1, only the numerator is output as a character string.
-    /// Otherwise the rational number is output as a fraction in the form *numerator/denominator*
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use recipers::Rational;
-    ///
-    /// let rational = Rational::new(42, 5);
-    /// let formatted = format!("{}", rational);
-    /// assert_eq!(formatted, "42/5")
-    /// ```
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if self.denominator == 1 {
-            write!(f, "{}", self.numerator)
-        } else {
-            write!(f, "{}/{}", self.numerator, self.denominator)
         }
     }
 }
@@ -338,29 +311,5 @@ mod test {
     #[test]
     fn into_rational_implicit() {
         assert_eq!(rat!(42, 1), 42.into())
-    }
-
-    #[test]
-    fn display_rational() {
-        struct Testcase {
-            subject: Rational,
-            want: String,
-        }
-
-        let testcases = [
-            Testcase {
-                subject: rat!(1, 2),
-                want: "1/2".into(),
-            },
-            Testcase {
-                subject: rat!(-3, 4),
-                want: "-3/4".to_string(),
-            },
-        ];
-
-        for testcase in testcases {
-            let got = testcase.subject.to_string();
-            assert_eq!(got, testcase.want)
-        }
     }
 }

@@ -195,10 +195,10 @@ impl FromStr for Rational {
 
         match state {
             ParseState::Q1(_) => Err(RationalParseError::NumberExpected),
-            ParseState::Q2(value) => Ok(value.into()),
+            ParseState::Q2(value) => Ok((&value).into()),
             ParseState::Q3(_) => Err(RationalParseError::NumberExpected),
-            ParseState::Q4(value) => Ok(value.into()),
-            ParseState::Q5(value) => Ok(value.into()),
+            ParseState::Q4(value) => Ok((&value).into()),
+            ParseState::Q5(value) => Ok((&value).into()),
             _ => Err(RationalParseError::UnexpectedEndOfLine),
         }
     }
@@ -229,20 +229,82 @@ enum ParseState {
 
 // internal (parse + format)
 #[derive(Debug, Copy, Clone)]
-struct MixedFraction {
-    sign: i64,
-    number: u64,
-    numerator: u64,
-    denominator: u64,
+pub(crate) struct MixedFraction {
+    pub sign: i64,
+    pub number: u64,
+    pub numerator: u64,
+    pub denominator: u64,
 }
 
-impl From<MixedFraction> for Rational {
-    fn from(value: MixedFraction) -> Self {
+impl MixedFraction {
+    // pub fn has_vulgar_fraction(&self) -> bool {
+    //     let fraction = rat!(self.numerator as i64, self.denominator as i64);
+    //     FRACTION_MAP.iter().any(|(_, v)| *v == fraction)
+    // }
+
+    // pub fn is_fraction_zero(&self) -> bool {
+    //     self.numerator == 0
+    // }
+
+    // pub fn vulgar_fraction(&self) -> char {
+    //     let fraction = rat!(self.numerator as i64, self.denominator as i64);
+    //     FRACTION_MAP
+    //         .iter()
+    //         .filter(|(_, v)| *v == &fraction)
+    //         .last()
+    //         .expect("muss gehen!")
+    //         .0
+    //         .clone()
+    // }
+
+    /// If [self] contains a number not equal to 0, it returns
+    /// Some(number) else None.
+    pub(crate) fn get_number(&self) -> Option<u64> {
+        match self.number {
+            n if n > 0 => Some(n),
+            _ => None,
+        }
+    }
+
+    /// if exists, it gives the fraction of a mixed number.
+    ///
+    /// The fraction exists, if numerator % denominator is
+    /// not equal to 0.
+    pub fn get_fraction(&self) -> Option<Rational> {
+        match self.numerator % self.denominator {
+            f if f != 0 => Some(rat!(f as i64, self.denominator as i64)),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn opt_vulgar_fraction(&self) -> Option<char> {
+        let fraction = rat!(self.numerator as i64, self.denominator as i64);
+        FRACTION_MAP
+            .iter()
+            .filter(|(_, v)| *v == &fraction)
+            .last()
+            .map(|f| *f.0)
+    }
+}
+
+impl From<&MixedFraction> for Rational {
+    fn from(value: &MixedFraction) -> Self {
         rat!(
             value.sign * value.number as i64 * value.denominator as i64
                 + value.sign * value.numerator as i64,
             value.denominator as i64
         )
+    }
+}
+
+impl From<&Rational> for MixedFraction {
+    fn from(value: &Rational) -> Self {
+        MixedFraction {
+            sign: value.numerator.signum(),
+            number: (value.numerator.abs() / value.denominator) as u64,
+            numerator: (value.numerator.abs() % value.denominator) as u64,
+            denominator: value.denominator as u64,
+        }
     }
 }
 
@@ -467,6 +529,4 @@ mod test {
             }
         }
     }
-
-
 }
