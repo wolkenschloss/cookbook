@@ -1,8 +1,7 @@
-use proc_macro::{TokenStream};
-use quote::{quote};
+use proc_macro::TokenStream;
+use quote::quote;
 use syn::parse::{Parse, ParseStream};
-use syn::{Block, braced, Ident, parse_macro_input, Stmt, token, ItemType, Token};
-
+use syn::{braced, parse_macro_input, token, Block, Ident, ItemType, Stmt, Token};
 
 /// Mit dem Spec Macro werden Testfälle beschrieben und ausführbare
 /// Tests generiert.
@@ -17,7 +16,7 @@ use syn::{Block, braced, Ident, parse_macro_input, Stmt, token, ItemType, Token}
 /// Eingabedaten von den auszuführenden Schritten getrennt
 /// formuliert. Das Macro fügt dann zur Übersetzungszeit beides
 /// in eigene Testmethoden zusammen.
-/// 
+///
 /// # Offene Aufgaben
 /// - [] Attribute `#[should_panic]` und `#[ignore]` an Testfällen
 /// - [] Rückgabewert der generierten Testfunktion optional Result<>
@@ -32,9 +31,9 @@ use syn::{Block, braced, Ident, parse_macro_input, Stmt, token, ItemType, Token}
 /// case : 'case' ident '{' <body> '}'
 /// body : stmt*
 /// ```
-/// 
+///
 /// Ident für case muss eindeutig innerhalb der Spezifikation sein.
-/// 
+///
 ///
 /// # Examples
 ///
@@ -80,7 +79,6 @@ use syn::{Block, braced, Ident, parse_macro_input, Stmt, token, ItemType, Token}
 ///
 #[proc_macro]
 pub fn spec(input: TokenStream) -> TokenStream {
-
     let spec = parse_macro_input!(input as Spec);
     let spec_name = &spec.ident;
     let body = spec.body.stmts;
@@ -97,7 +95,7 @@ pub fn spec(input: TokenStream) -> TokenStream {
                     #[test]
                     fn #ident() -> #ty {
                         #(#prelude)*
-                        #(#body)*        
+                        #(#body)*
                     }
                 }
             }
@@ -108,12 +106,12 @@ pub fn spec(input: TokenStream) -> TokenStream {
                         #(#prelude)*
                         #(#body)*
                     }
-                }        
+                }
             }
         }
     });
 
-    TokenStream::from(quote!{
+    TokenStream::from(quote! {
         #[cfg(test)]
         mod #spec_name {
             use super::*;
@@ -136,24 +134,23 @@ impl Parse for Spec {
         let _brace_token: token::Brace = braced!(content in input);
 
         let body = content.call(SpecBody::parse)?;
-        Ok(Spec{ident, body})
+        Ok(Spec { ident, body })
     }
 }
 
 struct SpecBody {
     stmts: Vec<Stmt>,
     cases: Vec<Case>,
-    output: Option<ItemType>
+    output: Option<ItemType>,
 }
 
 impl Parse for SpecBody {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut cases = Vec::new();
 
-        
         let mut lookahead = input.lookahead1();
         let output = if lookahead.peek(Token![type]) {
-            let o =input.call(syn::ItemType::parse).ok();
+            let o = input.call(syn::ItemType::parse).ok();
             // if let Some(ref p) = o {
             //     let p2 = p;
             //     let text = quote!{ #p2 };
@@ -161,10 +158,10 @@ impl Parse for SpecBody {
             // }
             lookahead = input.lookahead1();
             o
-        }else {
+        } else {
             None
         };
-        
+
         while lookahead.peek(kw::case) {
             let _case = input.parse::<kw::case>()?;
             let case_id: Ident = input.parse()?;
@@ -172,17 +169,14 @@ impl Parse for SpecBody {
             let content;
             let _brace_token: token::Brace = braced!(content in input);
             let stmts = content.call(Block::parse_within)?;
-            cases.push(Case {
-                case_id,
-                stmts
-            });
+            cases.push(Case { case_id, stmts });
 
             lookahead = input.lookahead1();
         }
 
-        let stmts =  Block::parse_within(input)?;
+        let stmts = Block::parse_within(input)?;
 
-        Ok(SpecBody{
+        Ok(SpecBody {
             cases,
             stmts,
             output,
@@ -196,6 +190,5 @@ mod kw {
 
 struct Case {
     case_id: Ident,
-    stmts: Vec<Stmt>
+    stmts: Vec<Stmt>,
 }
-

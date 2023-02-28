@@ -2,7 +2,7 @@ use spucky::*;
 
 spec! {
     example {
-      
+
         case a {
             let a = 1;
             let want = 1;
@@ -34,7 +34,7 @@ spec! {
         // case five {
         //     let result = Err("Fehler in Testfall five".to_string());
         // }
-                
+
         result
     }
 }
@@ -57,8 +57,7 @@ spec! {
 //         case six {
 //               panic!("Fehler in Testfall six");
 //         }
-//                
+//
 //         result
 //     }
 // }
-
