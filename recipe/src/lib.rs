@@ -148,13 +148,23 @@ impl fmt::Display for Rational {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+struct MixedFraction {
+    sign: i64,
+    number: u64,
+    numerator: u64,
+    denominator: u64
+}
+
 enum ParseState {
     Q0, // Start
-    Q1(i64), // Sign
-    Q2(i64), // Numerator
-    Q3(i64), // Fraction Bar
-    Q4(Rational), // Denominator
-    Q5(Rational), // Unicode Symbol
+    Q1(MixedFraction), // Sign
+    Q2(MixedFraction), // Numerator
+    Q3(MixedFraction), // Fraction Bar
+    Q4(MixedFraction), // Denominator
+    Q5(MixedFraction), // Unicode Symbol
+    Q6(MixedFraction),
+    Q7(MixedFraction),
 }
 
 lazy_static! {
@@ -186,6 +196,8 @@ lazy_static! {
 fn is_fraction_symbol(c: &char) -> bool {    
     FRACTION_MAP.contains_key(c)
 }
+
+
 
 impl FromStr for Rational {
     type Err = RationalParseError;
@@ -219,16 +231,18 @@ impl FromStr for Rational {
     /// Σ = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "+", "-", "/"}
     ///
     /// δ: Q x Σ -> Q (Übergangsfunktionen)
-    /// |Q      |"0"-"9"| "½"-"⅒" | "+" oder "-"| "/" |
-    /// |-------|-------|----------|-------------|-----|
-    /// |q0     | q2    | q5       | q1          |     |
-    /// |q1     | q2    | q5       |             |     |
-    /// |q2*    | q2    |          |             | q3  |
-    /// |q3     | q4    |          |             | q4  |
-    /// |q4*    | q4    |          |             |     |
-    /// |q5*    |       |          |             |     |
+    /// |Q      |"0"-"9"| "½"-"⅒" | "+" oder "-"| "/" | " " |
+    /// |-------|-------|----------|-------------|-----|-----|
+    /// |q0     | q2    | q5       | q1          |     |     |
+    /// |q1     | q2    | q5       |             |     |     |
+    /// |q2*    | q2    |          |             | q3  | q6  |
+    /// |q3     | q4    |          |             |     |     |
+    /// |q4*    | q4    |          |             |     |     |
+    /// |q5*    |       |          |             |     |     |
+    /// |q6*    | q7    | q5       |             |     |     |
+    /// |q7     | q7    |          |             | q3  |     |
     ///
-    /// F = {q2, q4}
+    /// F = {q2, q4, q5, a6}
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut state = ParseState::Q0;
 
@@ -237,40 +251,89 @@ impl FromStr for Rational {
                 f if is_fraction_symbol(&c) => {
                     let val = FRACTION_MAP.get(&f).expect("character must be a fraction");
                     match state {
-                        ParseState::Q0 => ParseState::Q5(*val),
-                        ParseState::Q1(sign) => ParseState::Q5(*val * sign.into()),
+                        ParseState::Q0 => ParseState::Q5(
+                            MixedFraction { 
+                                sign: 1, 
+                                number: 0, 
+                                numerator: val.numerator as u64, 
+                                denominator: val.denominator as u64
+                             }),
+                        ParseState::Q1(sign) => ParseState::Q5(
+                            MixedFraction { 
+                                sign:sign.sign, 
+                                number: sign.number, 
+                                numerator: val.numerator as u64, 
+                                denominator: val.denominator as u64,
+                             }),
+                             ParseState::Q2(number) => ParseState::Q5(MixedFraction { 
+                                sign: number.sign, 
+                                number: number.number, 
+                                numerator: val.numerator as u64, 
+                                denominator: val.denominator as u64,
+                             }),
+
                         _ => return Err(RationalParseError::InvalidCharacter(c))
                     }
                 }
                 '0'..='9' => {
                     match state {
-                        ParseState::Q0 => ParseState::Q2(c.to_digit(10).unwrap() as i64),
-                        ParseState::Q1(sign) => ParseState::Q2(c.to_digit(10).unwrap() as i64 * sign),
-                        ParseState::Q2(number)=> ParseState::Q2(number.signum() * (number.abs() * 10 + c.to_digit(10).unwrap() as i64)),
+                        ParseState::Q0 => ParseState::Q2(MixedFraction { 
+                            sign: 1, 
+                            number: c.to_digit(10).unwrap() as u64, 
+                            numerator: 0, 
+                            denominator: 1 
+                        }),
+                        ParseState::Q1(sign) => ParseState::Q2( MixedFraction {
+                            sign: sign.sign, 
+                            number: c.to_digit(10).unwrap() as u64, 
+                            numerator: 0,
+                            denominator:1
+                        }),
+                        ParseState::Q2(number)=> ParseState::Q2(
+                            MixedFraction { 
+                                sign: number.sign,
+                                number: number.number * 10 + c.to_digit(10).unwrap() as u64, 
+                                numerator: 0, // kann noch nicht gesetzt worden sein.
+                                denominator: 1 // kann noch nicht gesetzt worden sein.
+                            }),
                         ParseState::Q3(number) => ParseState::Q4(
-                            Rational {numerator: number, denominator: (c.to_digit(10).unwrap() as i64)}),
+                            MixedFraction { 
+                                sign: number.sign, 
+                                number: number.number, 
+                                numerator: number.numerator, 
+                                denominator: c.to_digit(10).unwrap() as u64
+                            }),
                         ParseState::Q4(fraction) => ParseState::Q4(
-                            Rational {
-                                numerator: fraction.numerator,
-                                denominator: fraction.denominator * 10 + c.to_digit(10).unwrap() as i64}),
+                            MixedFraction { 
+                                sign: fraction.sign, 
+                                number: fraction.number, 
+                                numerator: fraction.numerator, 
+                                denominator: fraction.denominator * 10 + c.to_digit(10).unwrap() as u64 
+                            }),
                         _ => return Err(RationalParseError::InvalidCharacter(c)),
                     }
                 },
                 '+' => {
                     match state {
-                        ParseState::Q0 => ParseState::Q1(1),
+                        ParseState::Q0 => ParseState::Q1(MixedFraction { sign: 1, number: 0, numerator:0, denominator: 1}),
                         _ => return Err(RationalParseError::InvalidCharacter(c))
                     }
                 },
                 '-' => {
                     match state {
-                        ParseState::Q0 => ParseState::Q1(-1),
+                        ParseState::Q0 => ParseState::Q1(MixedFraction { sign: -1, number: 0, numerator: 0, denominator: 1 }),
                         _ => return Err(RationalParseError::InvalidCharacter(c))
                     }
                 }
                 '/' => {
                     match state {
-                        ParseState::Q2(number) => {ParseState::Q3(number)},
+                        ParseState::Q2(number) => ParseState::Q3(
+                            MixedFraction { 
+                                sign: number.sign, 
+                                number: 0, 
+                                numerator: number.number, 
+                                denominator: 0, 
+                            }),
                         _ => return Err(RationalParseError::InvalidCharacter(c))
                     }
                 }
@@ -281,10 +344,10 @@ impl FromStr for Rational {
 
         match state {
             ParseState::Q1(_) => Err(RationalParseError::NumberExpected),
-            ParseState::Q2(value) => Ok(Rational::new(value, 1)),
+            ParseState::Q2(value) => Ok(rat!(value.sign * value.number as i64, 1)),
             ParseState::Q3(_) => Err(RationalParseError::NumberExpected),
-            ParseState::Q4(value) => Ok(value.normalize()),
-            ParseState::Q5(value) => Ok(value),
+            ParseState::Q4(value) => Ok(rat!(value.sign * value.numerator as i64, value.denominator as i64)),
+            ParseState::Q5(value) => Ok(rat!(value.sign * value.number as i64 * value.denominator as i64 +  value.sign *value.numerator as i64, value.denominator as i64)),
             _ => Err(RationalParseError::UnexpectedEndOfLine),
         }
     }
@@ -586,6 +649,21 @@ mod test {
             case case15 {
                 let input = "-\u{2154}";
                 let want = rat!(-2, 3);
+            }
+
+            case case16 {
+                let input = "42\u{00bd}";
+                let want = rat!(42 * 2 + 1, 2);
+            }
+
+            case case17 {
+                let input = "+17\u{2153}";
+                let want = rat!(17 * 3 + 1, 3);
+            }
+
+            case case18 {
+                let input = "-6\u{2154}";
+                let want = rat!(-6 * 3 + -2, 3);
             }
 
             let got = input.parse().unwrap();
