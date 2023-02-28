@@ -26,7 +26,7 @@
 	<text x="158.5" y="476.5" font-family="Times New Roman" font-size="20">+,-</text>
 	<polygon stroke="black" stroke-width="1" points="92.5,452.5 92.5,281.5"/>
 	<polygon fill="black" stroke-width="1" points="92.5,281.5 87.5,289.5 97.5,289.5"/>
-	<text x="97.5" y="373.5" font-family="Times New Roman" font-size="20">1/2-1/10</text>
+	<text x="97.5" y="373.5" font-family="Times New Roman" font-size="20" font-style="italic">vulgar fraction</text>
 	<polygon stroke="black" stroke-width="1" points="122.388,485.09 512.612,518.91"/>
 	<polygon fill="black" stroke-width="1" points="512.612,518.91 505.074,513.238 504.21,523.2"/>
 	<text x="298.5" y="524.5" font-family="Times New Roman" font-size="20">0-9</text>
@@ -35,7 +35,7 @@
 	<text x="345.5" y="497.5" font-family="Times New Roman" font-size="20">0-9</text>
 	<polygon stroke="black" stroke-width="1" points="198.38,403.864 109.62,276.136"/>
 	<polygon fill="black" stroke-width="1" points="109.62,276.136 110.079,285.558 118.291,279.852"/>
-	<text x="159.5" y="332.5" font-family="Times New Roman" font-size="20">1/2-1/10</text>
+	<text x="159.5" y="332.5" font-family="Times New Roman" font-size="20" font-style="italic">vulgar fraction</text>
 	<path stroke="black" stroke-width="1" fill="none" d="M 571.37,513.787 A 22.5,22.5 0 1 1 566.183,539.724"/>
 	<text x="616.5" y="543.5" font-family="Times New Roman" font-size="20">0-9</text>
 	<polygon fill="black" stroke-width="1" points="566.183,539.724 567.932,548.994 575.282,542.214"/>
@@ -50,12 +50,12 @@
 	<polygon fill="black" stroke-width="1" points="738.8,207.903 747.484,211.59 745.919,201.713"/>
 	<polygon stroke="black" stroke-width="1" points="538.609,491.753 515.391,314.247"/>
 	<polygon fill="black" stroke-width="1" points="515.391,314.247 511.471,322.828 521.386,321.531"/>
-	<text x="533.5" y="407.5" font-family="Times New Roman" font-size="20">space</text>
+	<text x="533.5" y="407.5" font-family="Times New Roman" font-size="20" font-style="italic">space</text>
 	<polygon stroke="black" stroke-width="1" points="515.391,314.247 538.609,491.753"/>
 	<polygon fill="black" stroke-width="1" points="538.609,491.753 542.529,483.172 532.614,484.469"/>
 	<polygon stroke="black" stroke-width="1" points="516.775,506.065 118.225,266.935"/>
 	<polygon fill="black" stroke-width="1" points="118.225,266.935 122.512,275.338 127.657,266.763"/>
-	<text x="322.5" y="377.5" font-family="Times New Roman" font-size="20">1/2-1/10</text>
+	<text x="322.5" y="377.5" font-family="Times New Roman" font-size="20" font-style="italic">vulgar fraction</text>
 	<polygon stroke="black" stroke-width="1" points="528.466,259.758 566.534,204.242"/>
 	<polygon fill="black" stroke-width="1" points="566.534,204.242 557.886,208.012 566.134,213.667"/>
 	<text x="553.5" y="251.5" font-family="Times New Roman" font-size="20">0-9</text>
@@ -67,5 +67,5 @@
 	<text x="634.5" y="297.5" font-family="Times New Roman" font-size="20">/</text>
 	<polygon stroke="black" stroke-width="1" points="481.593,282.145 122.407,253.855"/>
 	<polygon fill="black" stroke-width="1" points="122.407,253.855 129.99,259.468 130.775,249.499"/>
-	<text x="265.5" y="255.5" font-family="Times New Roman" font-size="20">1/2-1/10</text>
+	<text x="265.5" y="255.5" font-family="Times New Roman" font-size="20" font-style="italic">vulgar fraction</text>
 </svg>
