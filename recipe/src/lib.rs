@@ -6,12 +6,67 @@ mod parse;
 #[macro_use]
 extern crate lazy_static;
 
+/// Rational represents a rational number indicating the quantity of
+/// ingredients in a recipe.
+///
+/// Rational numbers can be created using the [rat] macro or the new
+/// constructor function. The denominator cannot be 0.
+///
+/// # Examples
+///
+/// ```
+/// use recipers::rat;
+/// use recipers::Rational;
+///
+/// let three_half = rat!(3, 2);
+/// assert_eq!("1½", three_half.to_string());
+/// ```
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Rational {
     numerator: i64,
     denominator: i64,
 }
 
+/// The rat macro creates a new rational number.
+///
+/// In the first form, the macro expects the denominator and
+/// numerator to be i64-type integers. The denominator cannot be 0.
+///
+///
+///
+/// # Panics
+///
+/// The creation of the rational number will panic if the
+/// denominator is 0.
+///
+/// # Example
+///
+/// You can use the rat macro to convert integers to a rational
+/// number.
+///
+/// ```
+/// use recipers::rat;
+/// use recipers::Rational;
+///
+/// let a = rat!(42);
+/// let b = 42.into();
+/// let c = rat!(42, 1);
+/// assert_eq!(a, b);
+/// assert_eq!(a, c);
+/// ```
+///
+/// Rational numbers are equal if they are equal in their reduced
+/// form.
+///
+/// ```
+/// use recipers::rat;
+/// use recipers::Rational;
+///
+/// let a = rat!(4, 2);
+/// let b = rat!(2, 1);
+///
+/// assert_eq!(a, b);
+/// ```
 #[macro_export]
 macro_rules! rat {
     ($n:expr, $d:expr) => {
@@ -23,12 +78,31 @@ macro_rules! rat {
 }
 
 impl Rational {
+    /// Neutral element related to the multiplication of rational
+    /// numbers.
     pub const ONE: Rational = Self::new(1, 1);
+
+    /// Neutral element regarding the addition of rational numbers.
     pub const ZERO: Rational = Self::new(0, 1);
 
+    /// This function creates a new rational number from the
+    /// numerator and denominator.
+    ///
+    ///
+    /// The generated fraction is always presented in reduced form.
+    /// The greatest common divisor of the numerator and denominator
+    /// is 1, regardless of the values given as arguments for the
+    /// numerator and denominator.
+    ///
+    /// The counter must not be 0.
+    ///
+    /// # Panics
+    ///
+    /// The function panics, if denominator is 0.
     pub const fn new(numerator: i64, denominator: i64) -> Rational {
+        // assert_ne! cannot be used by a const fn.
         if denominator == 0 {
-            panic!()
+            panic!("The denominator cannot be 0")
         }
 
         let gcd = gcd(numerator, denominator);
@@ -311,5 +385,11 @@ mod test {
     #[test]
     fn into_rational_implicit() {
         assert_eq!(rat!(42, 1), 42.into())
+    }
+
+    #[test]
+    #[should_panic(expected = "The denominator cannot be 0")]
+    fn check_denominator() {
+        rat!(1, 0);
     }
 }

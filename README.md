@@ -4,7 +4,7 @@ Ein Kochbuch mit Rezepten, Zutaten und ....
 
 # Meine Keybindings
 
-* `Ctrl+Alt+S` Einstellungen
+* `Ctrl+Alt+S` Einstellungen (wie in IntelliJ)
 * `Ctrl+Shift+P` Befehlspalette
 
 

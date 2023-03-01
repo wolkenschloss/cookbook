@@ -237,26 +237,6 @@ pub(crate) struct MixedFraction {
 }
 
 impl MixedFraction {
-    // pub fn has_vulgar_fraction(&self) -> bool {
-    //     let fraction = rat!(self.numerator as i64, self.denominator as i64);
-    //     FRACTION_MAP.iter().any(|(_, v)| *v == fraction)
-    // }
-
-    // pub fn is_fraction_zero(&self) -> bool {
-    //     self.numerator == 0
-    // }
-
-    // pub fn vulgar_fraction(&self) -> char {
-    //     let fraction = rat!(self.numerator as i64, self.denominator as i64);
-    //     FRACTION_MAP
-    //         .iter()
-    //         .filter(|(_, v)| *v == &fraction)
-    //         .last()
-    //         .expect("muss gehen!")
-    //         .0
-    //         .clone()
-    // }
-
     /// If [self] contains a number not equal to 0, it returns
     /// Some(number) else None.
     pub(crate) fn get_number(&self) -> Option<u64> {
@@ -277,7 +257,7 @@ impl MixedFraction {
         }
     }
 
-    pub(crate) fn opt_vulgar_fraction(&self) -> Option<char> {
+    pub(crate) fn vulgar_fraction(&self) -> Option<char> {
         let fraction = rat!(self.numerator as i64, self.denominator as i64);
         FRACTION_MAP
             .iter()

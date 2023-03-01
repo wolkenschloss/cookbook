@@ -31,12 +31,12 @@ impl fmt::Display for Rational {
 
             // print space if there is a fraction which is not a
             // vulgar fraction.
-            if let (Some(_), None) = (mixed.get_fraction(), mixed.opt_vulgar_fraction()) {
+            if let (Some(_), None) = (mixed.get_fraction(), mixed.vulgar_fraction()) {
                 write!(f, " ")?;
             }
         }
 
-        if let Some(v) = mixed.opt_vulgar_fraction() {
+        if let Some(v) = mixed.vulgar_fraction() {
             write!(f, "{}", v)
         } else if let Some(r) = mixed.get_fraction() {
             write!(f, "{}/{}", r.numerator, r.denominator)
@@ -64,7 +64,7 @@ mod test {
         display_rational {
             case case1 {
                 let number = rat!(1, 2);
-                let want = "1½";
+                let want = "½";
             }
 
             case case2 {
