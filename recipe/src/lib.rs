@@ -1,10 +1,52 @@
 use std::ops::{Add, Div, Mul, Sub};
 
+use uuid::Uuid;
+
 mod format;
 mod parse;
+mod repository;
 
 #[macro_use]
 extern crate lazy_static;
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Recipe {
+    title: String,
+    preparation: String,
+    servings: u8,
+    ingredients: Vec<Ingredient>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+struct Ingredient {
+    name: String,
+    quantity: Rational,
+    unit: String,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+struct Summary {
+    title: String,
+    id: Uuid,
+}
+
+impl Into<Summary> for (&Uuid, &Recipe) {
+    fn into(self) -> Summary {
+        Summary {
+            id: *self.0,
+            title: self.1.title.clone(),
+        }
+    }
+    // fn from(value: &Recipe) -> Self {
+    //     Summary { title: value.title, id: value. }
+    // }
+}
+
+#[derive(Debug)]
+pub struct TableOfContents {
+    total: usize,
+    content: Vec<Summary>,
+}
 
 /// Rational represents a rational number indicating the quantity of
 /// ingredients in a recipe.
