@@ -2,12 +2,64 @@ use crate::Recipe;
 use crate::Summary;
 use crate::TableOfContents;
 use std::collections::HashMap;
-use std::ops::Range;
-
-use std::slice::SliceIndex;
 
 use uuid::Uuid;
 
+pub enum Range {
+    /// Das Intervall enthält sowohl a als auch b.
+    ///
+    /// [a,b]:=\{x\in \mathbb{R} \mid a\leq x\leq b\}
+    /// [a, b] = {x | a <= x <= b}
+    Closed { start: usize, end: usize },
+
+    /// [a, +∞) = {x | x >= a}
+    LeftClosed { start: usize },
+
+    /// (-∞, b] = {x | x <= b}
+    RightClosed { end: usize },
+
+    /// (-∞, +∞) = R
+    Unbounded,
+}
+
+impl Range {
+    fn get<'a, T>(&self, slice: &'a [T]) -> &'a [T] {
+        match self {
+            Range::Closed { start, end } => &slice[(*start..=*end)],
+            Range::LeftClosed { start } => &slice[(*start..)],
+            Range::RightClosed { end } => &slice[(..=*end)],
+            Range::Unbounded => slice,
+        }
+    }
+}
+
+// impl SliceIndex<Uuid> for Range {
+//     type Output;
+
+//     fn get(self, slice: &Uuid) -> Option<&Self::Output> {
+//         todo!()
+//     }
+
+//     fn get_mut(self, slice: &mut Uuid) -> Option<&mut Self::Output> {
+//         todo!()
+//     }
+
+//     unsafe fn get_unchecked(self, slice: *const Uuid) -> *const Self::Output {
+//         todo!()
+//     }
+
+//     unsafe fn get_unchecked_mut(self, slice: *mut Uuid) -> *mut Self::Output {
+//         todo!()
+//     }
+
+//     fn index(self, slice: &Uuid) -> &Self::Output {
+//         todo!()
+//     }
+
+//     fn index_mut(self, slice: &mut Uuid) -> &mut Self::Output {
+//         todo!()
+//     }
+// }
 pub struct Repository {
     entries: HashMap<Uuid, Recipe>,
 }
@@ -26,18 +78,13 @@ impl Repository {
         Ok(id)
     }
 
-    pub fn list2(&self, range: &dyn SliceIndex<[Uuid], Output = [Uuid]>) -> Vec<Uuid> {
+    pub fn list_ids(&self, range: &Range) -> Vec<Uuid> {
         let keys = &self.entries.keys().cloned().collect::<Vec<Uuid>>();
-        range.get(&keys);
-        let some_keys = &keys[range];
-        some_keys.into()
+
+        range.get(keys).into()
     }
 
-    pub fn list(
-        &self,
-        range: Range<usize>,
-        search: &str,
-    ) -> Result<TableOfContents, RepositoryError> {
+    pub fn list(&self, range: Range, search: &str) -> Result<TableOfContents, RepositoryError> {
         let mut sumvec: Vec<Summary> = (&self.entries)
             .iter()
             .map(|entity| entity.into())
@@ -45,11 +92,11 @@ impl Repository {
             .collect();
 
         sumvec.sort();
+        let res: Vec<Summary> = range.get(&sumvec).into();
 
-        let page = &sumvec[range];
         Ok(TableOfContents {
             total: self.entries.len(),
-            content: page.to_vec(),
+            content: res,
         })
     }
 
@@ -80,11 +127,8 @@ pub enum UpdateResult {
 
 #[cfg(test)]
 mod test {
-    use std::{process::Output, slice::SliceIndex};
-
+    use super::{Range, Repository, RepositoryError};
     use crate::Recipe;
-
-    use super::{Repository, RepositoryError};
 
     lazy_static! {
         static ref TESTDATA: Vec<Recipe> = vec![Recipe {
@@ -115,38 +159,37 @@ mod test {
         Ok(())
     }
 
-    use std::collections::HashSet;
-    use std::ops::{Range, RangeFull};
-    use uuid::Uuid;
-
-    type UuidSliceIndex = dyn SliceIndex<[Uuid], Output = [Uuid]>;
-
     #[test]
     fn list_some_keys() -> Result<(), RepositoryError> {
         let mut repository = Repository::new();
         fill_with_testdata(&mut repository);
 
         struct Testcase {
-            range: Box<dyn SliceIndex<[Uuid], Output = [Uuid]>>,
+            range: Range,
             want: usize,
         }
 
-        let mut td3: Vec<Testcase> = Vec::new();
-        let tdd3 = Testcase {
-            range: Box::new(..),
-            want: 100,
-        };
-        td3.push(tdd3);
-
-        let tdd4 = Testcase {
-            range: Box::new(0..),
-            want: 100,
-        };
-        td3.push(tdd4);
+        let td3: Vec<Testcase> = vec![
+            Testcase {
+                range: Range::Unbounded,
+                want: 100,
+            },
+            Testcase {
+                range: Range::LeftClosed { start: 0 },
+                want: 100,
+            },
+            Testcase {
+                range: Range::RightClosed { end: 99 },
+                want: 100,
+            },
+            Testcase {
+                range: Range::Closed { start: 0, end: 99 },
+                want: 100,
+            },
+        ];
 
         for testcase in &td3 {
-            let r = *(testcase.range);
-            let keys = repository.list2(r.copy());
+            let keys = repository.list_ids(&testcase.range);
             assert_eq!(keys.len(), testcase.want)
         }
         Ok(())
@@ -179,23 +222,4 @@ mod test {
 
     //     Ok(())
     // }
-
-    #[test]
-    fn test_chatgpt() {
-        let vec = vec![1, 2, 3, 4, 5];
-        let open_range = 1..;
-        let half_open_range = ..4;
-        let slice1 = get_slice_from_range(&vec, open_range.start..);
-        let slice2 = get_slice_from_range(&vec, ..half_open_range.end);
-
-        println!("{:?}", slice1); // Output: [2, 3, 4, 5]
-        println!("{:?}", slice2); // Output: [1, 2, 3, 4]
-    }
-
-    fn get_slice_from_range<'a, I>(vec: &'a [i32], range: I) -> &'a I::Output
-    where
-        I: std::slice::SliceIndex<[i32]>,
-    {
-        &vec[range]
-    }
 }
