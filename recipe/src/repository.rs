@@ -1,65 +1,89 @@
 use crate::Recipe;
 use crate::Summary;
 use crate::TableOfContents;
+use std::cmp::{max, min};
 use std::collections::HashMap;
+use std::ops::Bound;
+use std::ops::RangeBounds;
 
 use uuid::Uuid;
-
+#[derive(Debug, Copy, Clone)]
 pub enum Range {
     /// Das Intervall enthält sowohl a als auch b.
     ///
-    /// [a,b]:=\{x\in \mathbb{R} \mid a\leq x\leq b\}
-    /// [a, b] = {x | a <= x <= b}
+    /// [start, end] = {x | start <= x <= end}
     Closed { start: usize, end: usize },
 
-    /// [a, +∞) = {x | x >= a}
+    /// [start, +∞) = {x | x >= start}
     LeftClosed { start: usize },
 
-    /// (-∞, b] = {x | x <= b}
+    /// (-∞, end] = {x | x <= end}
     RightClosed { end: usize },
 
-    /// (-∞, +∞) = R
+    /// (-∞, +∞) = N
     Unbounded,
 }
 
 impl Range {
-    fn get<'a, T>(&self, slice: &'a [T]) -> &'a [T] {
+    fn get<T>(self, slice: &[T]) -> &[T] {
         match self {
-            Range::Closed { start, end } => &slice[(*start..=*end)],
-            Range::LeftClosed { start } => &slice[(*start..)],
-            Range::RightClosed { end } => &slice[(..=*end)],
+            Range::Closed { start, end } => &slice[(start..=end)],
+            Range::LeftClosed { start } => &slice[(start..)],
+            Range::RightClosed { end } => &slice[(..=end)],
             Range::Unbounded => slice,
+        }
+    }
+
+    fn intersect(self, other: impl RangeBounds<usize>) -> (Bound<usize>, Bound<usize>) {
+        let start = match (self.start_bound(), other.start_bound()) {
+            (Bound::Unbounded, Bound::Unbounded) => Bound::Unbounded,
+            (Bound::Unbounded, Bound::Included(start)) => Bound::Included(*start),
+            (Bound::Included(start), Bound::Unbounded) => Bound::Included(*start),
+            (Bound::Included(a), Bound::Included(b)) => Bound::Included(max(*a, *b)),
+            _ => panic!("unsupported intersection"),
+        };
+
+        let end = match (self.end_bound(), other.end_bound()) {
+            (Bound::Unbounded, Bound::Unbounded) => Bound::Unbounded,
+            (Bound::Unbounded, Bound::Included(end)) => Bound::Included(*end),
+            (Bound::Unbounded, Bound::Excluded(end)) => Bound::Included(*end + 1),
+            (Bound::Included(a), Bound::Included(b)) => Bound::Included(min(*a, *b)),
+            _ => panic!("unsupported intersection"),
+        };
+
+        (start, end)
+    }
+}
+
+impl<T> From<&Vec<T>> for Range {
+    fn from(value: &Vec<T>) -> Self {
+        Range::Closed {
+            start: 0,
+            end: value.len() - 1,
         }
     }
 }
 
-// impl SliceIndex<Uuid> for Range {
-//     type Output;
+impl RangeBounds<usize> for Range {
+    fn start_bound(&self) -> Bound<&usize> {
+        match self {
+            Range::Unbounded => Bound::Unbounded,
+            Range::RightClosed { .. } => Bound::Unbounded,
+            Range::Closed { start, .. } => Bound::Included(start),
+            Range::LeftClosed { start } => Bound::Included(start),
+        }
+    }
 
-//     fn get(self, slice: &Uuid) -> Option<&Self::Output> {
-//         todo!()
-//     }
+    fn end_bound(&self) -> Bound<&usize> {
+        match self {
+            Range::Unbounded => Bound::Unbounded,
+            Range::RightClosed { end } => Bound::Included(end),
+            Range::Closed { start: _start, end } => Bound::Included(end),
+            Range::LeftClosed { start: _start } => Bound::Unbounded,
+        }
+    }
+}
 
-//     fn get_mut(self, slice: &mut Uuid) -> Option<&mut Self::Output> {
-//         todo!()
-//     }
-
-//     unsafe fn get_unchecked(self, slice: *const Uuid) -> *const Self::Output {
-//         todo!()
-//     }
-
-//     unsafe fn get_unchecked_mut(self, slice: *mut Uuid) -> *mut Self::Output {
-//         todo!()
-//     }
-
-//     fn index(self, slice: &Uuid) -> &Self::Output {
-//         todo!()
-//     }
-
-//     fn index_mut(self, slice: &mut Uuid) -> &mut Self::Output {
-//         todo!()
-//     }
-// }
 pub struct Repository {
     entries: HashMap<Uuid, Recipe>,
 }
@@ -79,24 +103,27 @@ impl Repository {
     }
 
     pub fn list_ids(&self, range: &Range) -> Vec<Uuid> {
-        let keys = &self.entries.keys().cloned().collect::<Vec<Uuid>>();
+        let keys: &Vec<Uuid> = &self.entries.keys().cloned().collect();
 
-        range.get(keys).into()
+        let bounds: Range = keys.into();
+        keys[range.intersect(bounds)].into()
     }
 
-    pub fn list(&self, range: Range, search: &str) -> Result<TableOfContents, RepositoryError> {
-        let mut sumvec: Vec<Summary> = (&self.entries)
+    pub fn list(&self, range: &Range, search: &str) -> Result<TableOfContents, RepositoryError> {
+        let mut summaries: Vec<Summary> = self
+            .entries
             .iter()
             .map(|entity| entity.into())
             .filter(|s: &Summary| s.title.starts_with(search))
             .collect();
 
-        sumvec.sort();
-        let res: Vec<Summary> = range.get(&sumvec).into();
+        summaries.sort();
+        let bounds: Range = Range::from(&summaries); // (&sumvec).into();
+        let content: Vec<Summary> = summaries[range.intersect(bounds)].into();
 
         Ok(TableOfContents {
             total: self.entries.len(),
-            content: res,
+            content,
         })
     }
 
@@ -129,6 +156,7 @@ pub enum UpdateResult {
 mod test {
     use super::{Range, Repository, RepositoryError};
     use crate::Recipe;
+    use spucky::spec;
 
     lazy_static! {
         static ref TESTDATA: Vec<Recipe> = vec![Recipe {
@@ -157,6 +185,38 @@ mod test {
         assert_eq!(&recipe, copy.unwrap());
 
         Ok(())
+    }
+
+    spec! {
+        list_some_keys {
+
+            case case1 {
+                let range = Range::Unbounded;
+                let want = 100;
+            }
+
+            case case2  {
+                let range = Range::LeftClosed { start: 0 };
+                let want = 100;
+            }
+
+            case case3 {
+                let range = Range::RightClosed { end: 99 };
+                let want = 100;
+            }
+
+            case case4 {
+                let range = Range::Closed { start: 0, end: 99 };
+                let want=  100;
+            }
+
+            let mut repository = Repository::new();
+            fill_with_testdata(&mut repository);
+
+            let keys = repository.list_ids(&range);
+            assert_eq!(keys.len(), want)
+        }
+
     }
 
     #[test]
@@ -206,20 +266,4 @@ mod test {
             _ = repository.insert(&recipe);
         }
     }
-
-    // #[test]
-    // fn test_list() -> Result<(), RepositoryError> {
-    //     let mut repository = Repository::new();
-    //     for d in TESTDATA.iter() {
-    //         let _ = repository.insert(d)?;
-    //     }
-
-    //     repository.list2(1..);
-    //     repository.list2(..4);
-
-    //     let toc = repository.list(.., "Las")?;
-    //     // println!("{:?}", toc);
-
-    //     Ok(())
-    // }
 }
