@@ -3,22 +3,31 @@ use crate::Summary;
 use crate::TableOfContents;
 use std::cmp::{max, min};
 use std::collections::HashMap;
+use std::io::Empty;
 use std::ops::Bound;
 use std::ops::RangeBounds;
 
 use uuid::Uuid;
 #[derive(Debug, Copy, Clone)]
 pub enum Range {
+    Empty,
     /// Das Intervall enthält sowohl a als auch b.
     ///
     /// [start, end] = {x | start <= x <= end}
-    Closed { start: usize, end: usize },
+    Closed {
+        start: usize,
+        end: usize,
+    },
 
     /// [start, +∞) = {x | x >= start}
-    LeftClosed { start: usize },
+    LeftClosed {
+        start: usize,
+    },
 
     /// (-∞, end] = {x | x <= end}
-    RightClosed { end: usize },
+    RightClosed {
+        end: usize,
+    },
 
     /// (-∞, +∞) = N
     Unbounded,
@@ -26,11 +35,33 @@ pub enum Range {
 
 impl Range {
     fn get<T>(self, slice: &[T]) -> &[T] {
+        if slice.len() == 0 {
+            return slice;
+        }
+
         match self {
-            Range::Closed { start, end } => &slice[(start..=end)],
-            Range::LeftClosed { start } => &slice[(start..)],
-            Range::RightClosed { end } => &slice[(..=end)],
+            Range::Closed { start, end } => &slice[(start..=(min(end, slice.len() - 1)))],
+            Range::LeftClosed { start } => &slice[start..],
+            Range::RightClosed { end } => &slice[..=(min(end, slice.len() - 1))],
             Range::Unbounded => slice,
+            Range::Empty => &slice[0..0],
+        }
+    }
+
+    fn clip(&self, max_len: usize) -> Range {
+        if max_len == 0 {
+            return Range::Empty;
+        }
+
+        match self {
+            Range::Closed { start, end } => Range::Closed {
+                start: *start,
+                end: min(*end, max_len - 1),
+            },
+            Range::RightClosed { end } => Range::RightClosed {
+                end: min(*end, max_len - 1),
+            },
+            _ => *self,
         }
     }
 
@@ -48,6 +79,8 @@ impl Range {
             (Bound::Unbounded, Bound::Included(end)) => Bound::Included(*end),
             (Bound::Unbounded, Bound::Excluded(end)) => Bound::Included(*end + 1),
             (Bound::Included(a), Bound::Included(b)) => Bound::Included(min(*a, *b)),
+            (Bound::Included(a), Bound::Unbounded) => Bound::Included(*a),
+            (Bound::Included(a), Bound::Excluded(b)) => Bound::Excluded(min(a - 1, *b)),
             _ => panic!("unsupported intersection"),
         };
 
@@ -55,11 +88,27 @@ impl Range {
     }
 }
 
+impl From<&Range> for (Bound<usize>, Bound<usize>) {
+    fn from(val: &Range) -> Self {
+        match val {
+            Range::Empty => (Bound::Included(usize::MIN), Bound::Excluded(usize::MIN)),
+            Range::Closed { start, end } => (Bound::Included(*start), Bound::Included(*end)),
+            Range::LeftClosed { start } => (Bound::Included(*start), Bound::Unbounded),
+            Range::RightClosed { end } => (Bound::Unbounded, Bound::Included(*end)),
+            Range::Unbounded => (Bound::Unbounded, Bound::Unbounded),
+        }
+    }
+}
+
 impl<T> From<&Vec<T>> for Range {
     fn from(value: &Vec<T>) -> Self {
-        Range::Closed {
-            start: 0,
-            end: value.len() - 1,
+        if value.len() > 0 {
+            Range::Closed {
+                start: 0,
+                end: value.len() - 1,
+            }
+        } else {
+            Range::Empty
         }
     }
 }
@@ -71,6 +120,7 @@ impl RangeBounds<usize> for Range {
             Range::RightClosed { .. } => Bound::Unbounded,
             Range::Closed { start, .. } => Bound::Included(start),
             Range::LeftClosed { start } => Bound::Included(start),
+            Range::Empty => Bound::Included(&usize::MIN),
         }
     }
 
@@ -80,6 +130,7 @@ impl RangeBounds<usize> for Range {
             Range::RightClosed { end } => Bound::Included(end),
             Range::Closed { start: _start, end } => Bound::Included(end),
             Range::LeftClosed { start: _start } => Bound::Unbounded,
+            Range::Empty => Bound::Excluded(&usize::MIN),
         }
     }
 }
@@ -118,8 +169,9 @@ impl Repository {
             .collect();
 
         summaries.sort();
-        let bounds: Range = Range::from(&summaries); // (&sumvec).into();
-        let content: Vec<Summary> = summaries[range.intersect(bounds)].into();
+        let clipped = &range.clip(summaries.len());
+        let bounds: (Bound<usize>, Bound<usize>) = clipped.into();
+        let content: Vec<Summary> = summaries[bounds].into();
 
         Ok(TableOfContents {
             total: self.entries.len(),
@@ -188,7 +240,7 @@ mod test {
     }
 
     spec! {
-        list_some_keys {
+        list_filled_repository {
 
             case case1 {
                 let range = Range::Unbounded;
@@ -210,13 +262,50 @@ mod test {
                 let want=  100;
             }
 
+            case case5 {
+                let range = Range::Closed {start: 2, end: 1};
+                let want = 0;
+            }
+
+            case case6 {
+                let range = Range::Closed {start: 99, end: 100};
+                let want = 1;
+            }
+
+            case case7 {
+                let range = Range::Closed {start: 99, end: 99};
+                let want = 1;
+            }
+
+            case case8 {
+                let range = Range::Closed {start: 0, end: 0};
+                let want = 1;
+            }
+
             let mut repository = Repository::new();
             fill_with_testdata(&mut repository);
 
-            let keys = repository.list_ids(&range);
-            assert_eq!(keys.len(), want)
+            match repository.list(&range, "") {
+                Ok(toc) => assert_eq!(toc.content.len(), want),
+                Err(_) => panic!("unexpected error"),
+            }
         }
 
+    }
+
+    spec! {
+        list_empty_repository {
+            case case1 {
+                let range = Range::Closed {start: 0, end: 0};
+                let want = 0;
+            }
+
+            let repository = Repository::new();
+            match repository.list(&range, "") {
+                Ok(toc) => assert_eq!(toc.content.len(), want),
+                Err(_) => panic!("unexpected error",)
+            }
+        }
     }
 
     #[test]
