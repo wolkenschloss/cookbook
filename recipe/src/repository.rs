@@ -1,9 +1,10 @@
 use crate::Recipe;
 use crate::Summary;
 use crate::TableOfContents;
-use std::cmp::{max, min};
+use std::cmp::min;
 use std::collections::HashMap;
-use std::io::Empty;
+use std::error;
+use std::fmt;
 use std::ops::Bound;
 use std::ops::RangeBounds;
 
@@ -34,12 +35,25 @@ pub enum Range {
 }
 
 impl Range {
-    fn get<T>(self, slice: &[T]) -> &[T] {
+    /// Returns the range of a slice specified by self.
+    ///
+    /// The range is adjusted to the length of the slice.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use recipers::repository::Range;
+    ///
+    /// let numbers = [1, 2, 3, 4, 5];
+    /// let range = Range::Closed{start: 2, end: 10};
+    /// assert_eq!([3, 4, 5], range.index(&numbers))
+    /// ```
+    pub fn index<T>(self, slice: &[T]) -> &[T] {
         if slice.len() == 0 {
             return slice;
         }
 
-        match self {
+        match self.clip(slice.len()) {
             Range::Closed { start, end } => &slice[(start..=(min(end, slice.len() - 1)))],
             Range::LeftClosed { start } => &slice[start..],
             Range::RightClosed { end } => &slice[..=(min(end, slice.len() - 1))],
@@ -62,40 +76,6 @@ impl Range {
                 end: min(*end, max_len - 1),
             },
             _ => *self,
-        }
-    }
-
-    fn intersect(self, other: impl RangeBounds<usize>) -> (Bound<usize>, Bound<usize>) {
-        let start = match (self.start_bound(), other.start_bound()) {
-            (Bound::Unbounded, Bound::Unbounded) => Bound::Unbounded,
-            (Bound::Unbounded, Bound::Included(start)) => Bound::Included(*start),
-            (Bound::Included(start), Bound::Unbounded) => Bound::Included(*start),
-            (Bound::Included(a), Bound::Included(b)) => Bound::Included(max(*a, *b)),
-            _ => panic!("unsupported intersection"),
-        };
-
-        let end = match (self.end_bound(), other.end_bound()) {
-            (Bound::Unbounded, Bound::Unbounded) => Bound::Unbounded,
-            (Bound::Unbounded, Bound::Included(end)) => Bound::Included(*end),
-            (Bound::Unbounded, Bound::Excluded(end)) => Bound::Included(*end + 1),
-            (Bound::Included(a), Bound::Included(b)) => Bound::Included(min(*a, *b)),
-            (Bound::Included(a), Bound::Unbounded) => Bound::Included(*a),
-            (Bound::Included(a), Bound::Excluded(b)) => Bound::Excluded(min(a - 1, *b)),
-            _ => panic!("unsupported intersection"),
-        };
-
-        (start, end)
-    }
-}
-
-impl From<&Range> for (Bound<usize>, Bound<usize>) {
-    fn from(val: &Range) -> Self {
-        match val {
-            Range::Empty => (Bound::Included(usize::MIN), Bound::Excluded(usize::MIN)),
-            Range::Closed { start, end } => (Bound::Included(*start), Bound::Included(*end)),
-            Range::LeftClosed { start } => (Bound::Included(*start), Bound::Unbounded),
-            Range::RightClosed { end } => (Bound::Unbounded, Bound::Included(*end)),
-            Range::Unbounded => (Bound::Unbounded, Bound::Unbounded),
         }
     }
 }
@@ -135,18 +115,20 @@ impl RangeBounds<usize> for Range {
     }
 }
 
+/// An in-memory repository for recipes
 pub struct Repository {
     entries: HashMap<Uuid, Recipe>,
 }
 
 impl Repository {
+    /// Creates a new repository
     pub fn new() -> Repository {
         Repository {
             entries: HashMap::new(),
         }
     }
 
-    /// Fügt ein Rezept in das Repository ein
+    /// Adds a recipe to the repository
     pub fn insert(&mut self, r: &Recipe) -> Result<Uuid, RepositoryError> {
         let id = Uuid::new_v4();
         self.entries.insert(id, r.clone());
@@ -156,10 +138,15 @@ impl Repository {
     pub fn list_ids(&self, range: &Range) -> Vec<Uuid> {
         let keys: &Vec<Uuid> = &self.entries.keys().cloned().collect();
 
-        let bounds: Range = keys.into();
-        keys[range.intersect(bounds)].into()
+        range.index(keys).into()
     }
 
+    /// Creates a table of contents for the specified filter
+    /// criteria.
+    ///
+    /// The recipes are sorted by name. All recipes that start with
+    /// "search" are included in the table of contents. The table of
+    /// contents contains all the recipes within the given range.
     pub fn list(&self, range: &Range, search: &str) -> Result<TableOfContents, RepositoryError> {
         let mut summaries: Vec<Summary> = self
             .entries
@@ -169,9 +156,7 @@ impl Repository {
             .collect();
 
         summaries.sort();
-        let clipped = &range.clip(summaries.len());
-        let bounds: (Bound<usize>, Bound<usize>) = clipped.into();
-        let content: Vec<Summary> = summaries[bounds].into();
+        let content: Vec<Summary> = range.index(&summaries).into();
 
         Ok(TableOfContents {
             total: self.entries.len(),
@@ -199,6 +184,14 @@ impl Repository {
 #[derive(Debug)]
 pub enum RepositoryError {}
 
+impl fmt::Display for RepositoryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Repository error")
+    }
+}
+
+impl error::Error for RepositoryError {}
+
 pub enum UpdateResult {
     Changed,
     Created,
@@ -220,7 +213,7 @@ mod test {
     }
 
     #[test]
-    fn test_insert() -> Result<(), RepositoryError> {
+    fn test_insert() -> Result<(), Box<dyn std::error::Error>> {
         let mut repo = Repository::new();
 
         let recipe = Recipe {

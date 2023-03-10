@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 mod format;
 mod parse;
-mod repository;
+pub mod repository;
 
 #[macro_use]
 extern crate lazy_static;
@@ -37,9 +37,6 @@ impl Into<Summary> for (&Uuid, &Recipe) {
             title: self.1.title.clone(),
         }
     }
-    // fn from(value: &Recipe) -> Self {
-    //     Summary { title: value.title, id: value. }
-    // }
 }
 
 #[derive(Debug)]
