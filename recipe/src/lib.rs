@@ -1,5 +1,6 @@
 use std::ops::{Add, Div, Mul, Sub};
 
+use serde::{de::Visitor, Deserialize, Serialize};
 use uuid::Uuid;
 
 mod format;
@@ -9,7 +10,7 @@ pub mod repository;
 #[macro_use]
 extern crate lazy_static;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct Recipe {
     title: String,
     preparation: String,
@@ -17,7 +18,7 @@ pub struct Recipe {
     ingredients: Vec<Ingredient>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Deserialize)]
 struct Ingredient {
     name: String,
     quantity: Rational,
@@ -209,6 +210,54 @@ impl Div for Rational {
 impl From<i64> for Rational {
     fn from(value: i64) -> Self {
         Rational::new(value, 1)
+    }
+}
+
+impl Serialize for Rational {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string());
+        todo!()
+    }
+}
+
+struct RationalVisitor;
+impl<'de> Visitor<'de> for RationalVisitor {
+    type Value = Rational;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("rational number")
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        match v.parse() {
+            Ok(r) => Ok(r),
+            Err(err) => Err(E::custom(err.to_string())),
+        }
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        match v.parse() {
+            Ok(r) => Ok(r),
+            Err(err) => Err(E::custom(err.to_string())),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Rational {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(RationalVisitor)
     }
 }
 

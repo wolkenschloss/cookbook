@@ -1,6 +1,9 @@
 use crate::rat;
 use crate::Rational;
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt::Debug;
+use std::fmt::Display;
 use std::str::FromStr;
 
 impl FromStr for Rational {
@@ -211,6 +214,19 @@ pub enum RationalParseError {
     NumberExpected,
     InvalidCharacter(char),
 }
+
+impl Display for RationalParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RationalParseError::UnexpectedEndOfLine => write!(f, "unexpected end of line"),
+            RationalParseError::InvalidNumber => write!(f, "invalid number"),
+            RationalParseError::NumberExpected => write!(f, "number expected"),
+            RationalParseError::InvalidCharacter(_) => write!(f, "invalid character"),
+        }
+    }
+}
+
+impl Error for RationalParseError {}
 
 fn is_fraction_symbol(c: &char) -> bool {
     FRACTION_MAP.contains_key(c)
