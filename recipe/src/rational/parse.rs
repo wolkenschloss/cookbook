@@ -1,5 +1,5 @@
 use crate::rat;
-use crate::Rational;
+use crate::rational::Rational;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
@@ -82,7 +82,7 @@ impl FromStr for Rational {
     /// </tr>
     /// </table>
     ///
-    #[doc= include_str!("../doc/parser.svg")]
+    #[doc= include_str!("../../doc/parser.svg")]
     ///
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         fn to_digit_unwrap(c: char) -> u64 {

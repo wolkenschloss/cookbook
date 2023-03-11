@@ -1,5 +1,5 @@
-use crate::parse::MixedFraction;
-use crate::Rational;
+use crate::rational::parse::MixedFraction;
+use crate::rational::Rational;
 use std::fmt;
 
 impl fmt::Display for Rational {

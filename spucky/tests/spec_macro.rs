@@ -25,13 +25,13 @@ spec! {
 
 spec! {
     result {
-        type Output = Result<(), String>;
+        type Output = Result<(), Box<dyn std::error::Error>>;
 
-        case four {
+        case test_ok {
             let result = Ok(());
         }
 
-        // case five {
+        // case test_error {
         //     let result = Err("Fehler in Testfall five".to_string());
         // }
 

@@ -6,8 +6,12 @@ use std::collections::HashMap;
 use std::error;
 use std::fmt;
 use std::ops::Bound;
+use std::ops::Index;
 use std::ops::RangeBounds;
+use std::ops::Sub;
 
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use uuid::Uuid;
 #[derive(Debug, Copy, Clone)]
 pub enum Range {
@@ -115,6 +119,28 @@ impl RangeBounds<usize> for Range {
     }
 }
 
+trait BoundExt<T> {
+    fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Bound<U>;
+    fn map_raw<U, F: FnOnce(Bound<T>) -> Bound<U>>(self, f: F) -> Bound<U>;
+}
+
+impl<T> BoundExt<T> for Bound<T>
+where
+    T: Ord + Sub,
+{
+    fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Bound<U> {
+        match self {
+            Bound::Unbounded => Bound::Unbounded,
+            Bound::Included(x) => Bound::Included(f(x)),
+            Bound::Excluded(x) => Bound::Excluded(f(x)),
+        }
+    }
+
+    fn map_raw<U, F: FnOnce(Bound<T>) -> Bound<U>>(self, f: F) -> Bound<U> {
+        f(self)
+    }
+}
+
 /// An in-memory repository for recipes
 pub struct Repository {
     entries: HashMap<Uuid, Recipe>,
@@ -164,6 +190,47 @@ impl Repository {
         })
     }
 
+    pub fn list2(
+        &self,
+        range: &(Bound<u64>, Bound<u64>),
+        search: &str,
+    ) -> Result<TableOfContents, RepositoryError> {
+        let mut summaries: Vec<Summary> = self
+            .entries
+            .iter()
+            .map(|entity| entity.into())
+            .filter(|s: &Summary| s.title.starts_with(search))
+            .collect();
+
+        summaries.sort();
+
+        tracing::debug!("Got range {:?}", range);
+
+        let xrange = if summaries.len() == 0 {
+            (Bound::Unbounded, Bound::Unbounded)
+        } else {
+            (
+                BoundExt::map(range.0, |f| f as usize),
+                BoundExt::map(range.1, |f| f as usize).map_raw(|f| match f {
+                    Bound::Unbounded => Bound::Unbounded,
+                    Bound::Included(x) => Bound::Included(min(x, summaries.len() - 1)),
+                    Bound::Excluded(x) => Bound::Excluded(min(x, summaries.len())),
+                }),
+            )
+        };
+
+        tracing::debug!("Transposed to {:?}", xrange);
+
+        //let content: Vec<Summary> =  range.index(&summaries).into();
+        // let content = summaries.index(xrange).into();
+        let content = summaries[xrange].into();
+
+        Ok(TableOfContents {
+            total: self.entries.len(),
+            content,
+        })
+    }
+
     pub fn get(&self, id: &Uuid) -> Result<Option<&Recipe>, RepositoryError> {
         Ok(self.entries.get(&id))
     }
@@ -184,6 +251,13 @@ impl Repository {
 #[derive(Debug)]
 pub enum RepositoryError {}
 
+impl IntoResponse for RepositoryError {
+    fn into_response(self) -> axum::response::Response {
+        let body = "internal server error: code rot 7";
+        (StatusCode::INTERNAL_SERVER_ERROR, body).into_response()
+    }
+}
+
 impl fmt::Display for RepositoryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Repository error")
@@ -199,6 +273,8 @@ pub enum UpdateResult {
 
 #[cfg(test)]
 mod test {
+    use std::{ops::Bound, slice::SliceIndex};
+
     use super::{Range, Repository, RepositoryError};
     use crate::Recipe;
     use spucky::spec;
@@ -347,5 +423,31 @@ mod test {
             };
             _ = repository.insert(&recipe);
         }
+    }
+
+    #[test]
+    fn unbound_range_experiment() {
+        let data = [1i32, 2, 3, 4, 5];
+        let range = (Bound::Unbounded, Bound::Unbounded);
+
+        let got = &data[range];
+        assert_eq!(got, &data[..])
+    }
+
+    // #[test]
+    // fn include_range_experiment() {
+    //     let data = [1, 2, 3, 4, 5];
+    //     let range = (Bound::<u64>::Unbounded, Bound::Included(5u64));
+
+    //     let got = &data[range];
+
+    //     assert_eq!(got, &data[..=3])
+    // }
+
+    #[test]
+    fn len_as_index_experiment() {
+        let data = [1, 2, 3, 4, 5];
+        let got = &data[..data.len()];
+        assert_eq!(&[1, 2, 3, 4, 5], got);
     }
 }
