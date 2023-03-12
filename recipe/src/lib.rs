@@ -48,7 +48,6 @@ pub struct Recipe {
 #[cfg(test)]
 mod test {
     use super::*;
-    use serde_json::{Result, Value};
 
     use spucky::spec;
 

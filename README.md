@@ -11,7 +11,7 @@ Ein Kochbuch mit Rezepten, Zutaten und ....
 
 ## Primäre Seitenleiste
 * `Strg+Umsch+E` Explorer öffnen - geht nicht
-* `Strg+Umsch+F` 
+* `Strg+Umsch+F` Suchen
 
 * `Ctrl-Shift-T` Tasks: Task ausführen (Alle Tests ausführen)
 * `Ctrl-K, Ctrl-S` Einstellungen Tastaturkurzbefehle öffnen

@@ -2,6 +2,9 @@
     "recommendations": [
         "serayuzgur.crates",
         "bungcip.better-toml",
-        "rust-lang.rust-analyzer"
+        "rust-lang.rust-analyzer",
+        "panicbit.cargo",
+        "vadimcn.vscode-lldb",
+        "github.vscode-pull-request-github"
     ]
 }

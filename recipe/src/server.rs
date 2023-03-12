@@ -11,7 +11,7 @@ use axum::{
     routing, Router,
 };
 use recipers::{
-    repository::{Repository, RepositoryError, UpdateResult},
+    repository::{Repository, UpdateResult},
     Recipe,
 };
 use serde::Deserialize;
@@ -94,6 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             routing::get(recipe_share).with_state(repository.clone()),
         );
 
+    tracing::debug!("listening to 0.0.0.0:8080");
     axum::Server::bind(&"0.0.0.0:8080".parse().unwrap())
         .serve(app.into_make_service())
         .await?;

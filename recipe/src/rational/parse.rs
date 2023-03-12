@@ -2,9 +2,10 @@ use crate::rat;
 use crate::rational::Rational;
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt::Debug;
-use std::fmt::Display;
-use std::str::FromStr;
+use std::{
+    fmt::{Debug, Display},
+    str::FromStr,
+};
 
 impl FromStr for Rational {
     type Err = RationalParseError;

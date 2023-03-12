@@ -1,18 +1,16 @@
 use crate::Recipe;
 use crate::Summary;
 use crate::TableOfContents;
-use std::cmp::min;
-use std::collections::HashMap;
-use std::error;
-use std::fmt;
-use std::ops::Bound;
-use std::ops::Index;
-use std::ops::RangeBounds;
-use std::ops::Sub;
+use axum::{http::StatusCode, response::IntoResponse};
+use std::{
+    cmp::min,
+    collections::HashMap,
+    error, fmt,
+    ops::{Bound, RangeBounds, Sub},
+};
 
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
 use uuid::Uuid;
+
 #[derive(Debug, Copy, Clone)]
 pub enum Range {
     Empty,
@@ -273,7 +271,7 @@ pub enum UpdateResult {
 
 #[cfg(test)]
 mod test {
-    use std::{ops::Bound, slice::SliceIndex};
+    use std::ops::Bound;
 
     use super::{Range, Repository, RepositoryError};
     use crate::Recipe;
