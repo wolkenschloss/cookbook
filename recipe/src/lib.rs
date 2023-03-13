@@ -16,9 +16,9 @@ struct Ingredient {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize)]
-struct Summary {
-    title: String,
-    id: Uuid,
+pub struct Summary {
+    pub title: String,
+    pub id: Uuid,
 }
 
 impl Into<Summary> for (&Uuid, &Recipe) {
@@ -32,8 +32,8 @@ impl Into<Summary> for (&Uuid, &Recipe) {
 
 #[derive(Debug, Serialize)]
 pub struct TableOfContents {
-    total: usize,
-    content: Vec<Summary>,
+    pub total: u64,
+    pub content: Vec<Summary>,
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]

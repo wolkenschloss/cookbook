@@ -14,7 +14,8 @@ use recipers::{
     repository::{Repository, UpdateResult},
     Recipe,
 };
-use serde::Deserialize;
+
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use tower_http::trace::TraceLayer;
@@ -109,6 +110,66 @@ struct Search {
     q: Option<String>,
 }
 
+#[derive(Serialize)]
+struct TableOfContents {
+    total: u64,
+    content: Vec<Content>,
+}
+
+impl From<&(&recipers::TableOfContents, &Vec<&str>)> for TableOfContents {
+    fn from(value: &(&recipers::TableOfContents, &Vec<&str>)) -> Self {
+        let toc = value.0;
+        let path = value.1;
+
+        let x = toc
+            .content
+            .iter()
+            .map(|item| Content {
+                title: item.title.clone(),
+                recipeId: item.id,
+                links: Links::new(item.id, path),
+            })
+            .collect();
+
+        TableOfContents {
+            total: toc.total,
+            content: x,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct Content {
+    title: String,
+    recipeId: Uuid,
+    #[serde(rename = "_links")]
+    links: Links,
+}
+
+#[derive(Serialize)]
+struct Links {
+    #[serde(rename = "self")]
+    myself: Link,
+}
+
+impl Links {
+    fn new(id: Uuid, path: &[&str]) -> Links {
+        let href = format!(
+            "http://localhost:8181/{}",
+            [path.join("/"), id.to_string()].join("/")
+        );
+
+        Links {
+            myself: Link { href },
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct Link {
+    href: String,
+}
+
 async fn recipes_get(
     State(state): State<AppState>,
     Query(parameter): Query<Search>,
@@ -127,8 +188,9 @@ async fn recipes_get(
 
     let repository = state.read().unwrap();
     let toc = repository.list2(&it, &search).map_err(internal_error)?;
-
-    Ok(Json(toc))
+    let path = &vec!["cookbook", "recipe"];
+    let pair = (&toc, path);
+    Ok(Json(TableOfContents::from(&pair)))
 }
 
 /// Utility function for mapping any error into a `500 Internal Server Error`
