@@ -126,7 +126,7 @@ impl From<&(&recipers::TableOfContents, &Vec<&str>)> for TableOfContents {
             .iter()
             .map(|item| Content {
                 title: item.title.clone(),
-                recipeId: item.id,
+                recipe_id: item.id,
                 links: Links::new(item.id, path),
             })
             .collect();
@@ -141,7 +141,8 @@ impl From<&(&recipers::TableOfContents, &Vec<&str>)> for TableOfContents {
 #[derive(Serialize)]
 struct Content {
     title: String,
-    recipeId: Uuid,
+    #[serde(rename = "recipeId")]
+    recipe_id: Uuid,
     #[serde(rename = "_links")]
     links: Links,
 }
@@ -250,5 +251,5 @@ async fn recipe_put(
     }
 }
 
-async fn recipe_delete(State(state): State<AppState>, Path(id): Path<Uuid>) {}
-async fn recipe_share(State(state): State<AppState>) {}
+async fn recipe_delete(State(_state): State<AppState>, Path(_id): Path<Uuid>) {}
+async fn recipe_share(State(_state): State<AppState>) {}

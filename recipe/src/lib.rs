@@ -2,7 +2,7 @@ use crate::rational::Rational;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-mod rational;
+pub mod rational;
 pub mod repository;
 
 #[macro_use]
