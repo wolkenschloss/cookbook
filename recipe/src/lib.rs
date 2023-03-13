@@ -15,7 +15,7 @@ struct Ingredient {
     unit: String,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize, Deserialize)]
 pub struct Summary {
     pub title: String,
     pub id: Uuid,
@@ -30,10 +30,19 @@ impl Into<Summary> for (&Uuid, &Recipe) {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct TableOfContents {
     pub total: u64,
     pub content: Vec<Summary>,
+}
+
+impl TableOfContents {
+    pub fn empty() -> TableOfContents {
+        TableOfContents {
+            total: 0,
+            content: vec![],
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
