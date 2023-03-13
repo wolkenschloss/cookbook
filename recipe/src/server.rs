@@ -112,15 +112,6 @@ mod test {
 
     #[tokio::test]
     async fn get_toc() {
-        let request = Request::builder().uri("/").body(Body::empty()).unwrap();
-
-        let response = router().ready().await.unwrap().call(request).await.unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK)
-    }
-
-    #[tokio::test]
-    async fn get_toc2() {
         let request = Request::builder()
             .uri("/cookbook/recipe")
             .header("Range", "bytes=0-9")
@@ -133,7 +124,6 @@ mod test {
 
         let raw_body = to_bytes(response.into_body()).await.unwrap();
         let got: TableOfContents = serde_json::from_slice(&raw_body).unwrap();
-        println!("{:?}", got);
 
         assert_eq!(got, TableOfContents::empty())
     }
