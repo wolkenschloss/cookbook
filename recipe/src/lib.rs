@@ -2,7 +2,7 @@ use crate::rational::Rational;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-mod rational;
+pub mod rational;
 pub mod repository;
 
 #[macro_use]
@@ -15,10 +15,10 @@ struct Ingredient {
     unit: String,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize)]
-struct Summary {
-    title: String,
-    id: Uuid,
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize, Deserialize)]
+pub struct Summary {
+    pub title: String,
+    pub id: Uuid,
 }
 
 impl Into<Summary> for (&Uuid, &Recipe) {
@@ -30,10 +30,19 @@ impl Into<Summary> for (&Uuid, &Recipe) {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct TableOfContents {
-    total: usize,
-    content: Vec<Summary>,
+    pub total: u64,
+    pub content: Vec<Summary>,
+}
+
+impl TableOfContents {
+    pub fn empty() -> TableOfContents {
+        TableOfContents {
+            total: 0,
+            content: vec![],
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]

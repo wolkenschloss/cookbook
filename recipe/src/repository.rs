@@ -183,7 +183,7 @@ impl Repository {
         let content: Vec<Summary> = range.index(&summaries).into();
 
         Ok(TableOfContents {
-            total: self.entries.len(),
+            total: self.entries.len() as u64,
             content,
         })
     }
@@ -224,7 +224,7 @@ impl Repository {
         let content = summaries[xrange].into();
 
         Ok(TableOfContents {
-            total: self.entries.len(),
+            total: self.entries.len() as u64,
             content,
         })
     }

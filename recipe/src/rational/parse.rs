@@ -22,9 +22,10 @@ impl FromStr for Rational {
     /// # Examples
     ///
     /// ```
-    /// use recipers::Rational;
-    /// use std::str::FromStr;
+    /// #[macro_use] extern crate recipers;
     /// use recipers::rat;
+    /// use recipers::rational::Rational;
+    /// use std::str::FromStr;
     ///
     /// let number = Rational::from_str("1/2").unwrap();
     ///
@@ -32,8 +33,9 @@ impl FromStr for Rational {
     /// ```
     ///
     /// ```
-    /// use recipers::Rational;
+    /// #[macro_use] extern crate recipers;
     /// use recipers::rat;
+    /// use recipers::rational::Rational;
     /// let number: Rational = "-1/2".parse().unwrap();
     /// assert_eq!(number, rat!(-1, 2));
     ///
@@ -211,7 +213,6 @@ impl FromStr for Rational {
 #[derive(Debug, PartialEq)]
 pub enum RationalParseError {
     UnexpectedEndOfLine,
-    InvalidNumber,
     NumberExpected,
     InvalidCharacter(char),
 }
@@ -220,7 +221,6 @@ impl Display for RationalParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RationalParseError::UnexpectedEndOfLine => write!(f, "unexpected end of line"),
-            RationalParseError::InvalidNumber => write!(f, "invalid number"),
             RationalParseError::NumberExpected => write!(f, "number expected"),
             RationalParseError::InvalidCharacter(_) => write!(f, "invalid character"),
         }

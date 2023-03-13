@@ -13,7 +13,7 @@ impl fmt::Display for Rational {
     /// # Examples
     ///
     /// ```
-    /// use recipers::Rational;
+    /// use recipers::rational::Rational;
     ///
     /// let rational = Rational::new(42, 5);
     /// let formatted = format!("{}", rational);

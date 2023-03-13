@@ -23,6 +23,30 @@
             "label": "cookbook: cargo build"
         },
         {
+            "detail": "Führt Doctests für alle Projekte des Workspaces aus",
+            "type": "cargo",
+            "command": "test",
+            "args": [
+                "--doc"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": false
+            },
+            "label": "cookbook: cargo test --doc"
+        },
+        {
             "detail": "Führt alle Tests des Projekts aus.",
             "type": "cargo",
             "command": "nextest",

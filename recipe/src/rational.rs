@@ -14,16 +14,17 @@ mod parse;
 /// # Examples
 ///
 /// ```
+/// #[macro_use] extern crate recipers;
 /// use recipers::rat;
-/// use recipers::Rational;
+/// use recipers::rational::Rational;
 ///
 /// let three_half = rat!(3, 2);
 /// assert_eq!("1½", three_half.to_string());
 /// ```
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Rational {
-    numerator: i64,
-    denominator: i64,
+    pub numerator: i64,
+    pub denominator: i64,
 }
 
 /// The rat macro creates a new rational number.
@@ -44,8 +45,9 @@ pub struct Rational {
 /// number.
 ///
 /// ```
+/// #[macro_use] extern crate recipers;
 /// use recipers::rat;
-/// use recipers::Rational;
+/// use recipers::rational::Rational;
 ///
 /// let a = rat!(42);
 /// let b = 42.into();
@@ -58,8 +60,9 @@ pub struct Rational {
 /// form.
 ///
 /// ```
+/// #[macro_use] extern crate recipers;
 /// use recipers::rat;
-/// use recipers::Rational;
+/// use recipers::rational::Rational;
 ///
 /// let a = rat!(4, 2);
 /// let b = rat!(2, 1);
