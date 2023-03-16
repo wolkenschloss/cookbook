@@ -155,7 +155,7 @@ pub async fn recipe_put(
     match result {
         UpdateResult::Created => Ok(StatusCode::CREATED.into_response()),
         UpdateResult::Changed => Ok((
-            StatusCode::OK,
+            StatusCode::NO_CONTENT,
             [(header::LOCATION, format!("/cookbook/recipe/{}", id))],
             Json(id),
         )

@@ -64,8 +64,11 @@ mod test {
 
     use std::error::Error;
     use std::ops::Bound;
-    use std::sync::{Arc, RwLock};
+    use std::sync::{Arc, RwLock, RwLockWriteGuard};
 
+    use axum::response::Response;
+    use axum::Router;
+    use http::request::Builder;
     use http::Method;
     use hyper::StatusCode;
     use hyper::{body::to_bytes, Body, Request};
@@ -74,7 +77,7 @@ mod test {
     use recipers::repository::Repository;
     use uuid::Uuid;
 
-    use crate::router;
+    use crate::{router, AppState};
 
     use tower::Service;
     use tower::ServiceExt;
@@ -198,66 +201,144 @@ mod test {
 
     #[tokio::test]
     async fn update_new_recipe() -> TestResult {
-        let repository = Arc::new(RwLock::new(Repository::new()));
+        let mut testbed = Testbed::new();
         let id = uuid::Uuid::new_v4();
-        let request = Request::builder()
-            .method(Method::PUT)
-            .uri(format!("/cookbook/recipe/{}", id))
-            .header("Content-Type", "application/json")
-            .body(fixture::LASAGNE.into())?;
+        let uri = format!("/cookbook/recipe/{id}");
 
-        let mut app = router(repository.clone());
-        let service = app.ready().await?;
-        let response = service.call(request).await?;
+        let response = { testbed.send_to_server(put(&uri, &fixture::LASAGNE)).await? };
 
         assert_eq!(response.status(), StatusCode::CREATED);
 
-        let r = repository.read().unwrap();
-        let got = r.get(&id)?;
+        let res = testbed.read(&id);
+        let recipe = res.unwrap();
 
-        assert!(got.is_some());
+        assert!(recipe.is_some());
 
         Ok(())
     }
 
+    struct Testbed {
+        state: AppState,
+        _app: Router,
+    }
+
+    impl Testbed {
+        fn new() -> Testbed {
+            let state = Arc::new(RwLock::new(Repository::new()));
+            Testbed {
+                state: state.clone(),
+                _app: router(state.clone()),
+            }
+        }
+
+        /// Gets exclusive write access to the application state
+        /// and executes a function.
+        fn write_state<F, T>(&mut self, func: F) -> T
+        where
+            F: FnOnce(&mut RwLockWriteGuard<Repository>) -> T,
+        {
+            let mut w = self.state.write().unwrap();
+            func(&mut w)
+        }
+
+        fn read<'a>(&'a self, id: &Uuid) -> Result<Option<Recipe>, Box<dyn Error + '_>> {
+            let r = self.state.read()?;
+            let opt = r.get(id)?;
+            Ok(opt.cloned())
+        }
+
+        /// Calls the application service
+        ///
+        /// You have to pass a function which builds the request
+        /// which will be send to the service.
+        async fn send_to_server<F>(&mut self, f: F) -> Result<Response, Box<dyn std::error::Error>>
+        where
+            F: FnOnce(Builder) -> Result<Request<Body>, http::Error>,
+        {
+            let service = self._app.ready().await?;
+            let builder = Request::builder();
+            let req = f(builder)?;
+            // Das ist ein Hack.
+            Ok(service.call(req).await.unwrap())
+        }
+    }
+
+    /// Builds a simple get request without body
+    ///
+    /// You may use this function as a paramater for
+    /// [Testbed::send_to_server].
+    fn get(uri: &str) -> impl FnOnce(Builder) -> Result<Request<Body>, http::Error> {
+        let uriclone = uri.to_string();
+        Box::new(move |r: Builder| r.uri(uriclone).body(Body::empty()))
+    }
+    fn delete(uri: &str) -> impl FnOnce(Builder) -> Result<Request<Body>, http::Error> {
+        let s = uri.to_string();
+        Box::new(move |r: Builder| r.uri(s).method(Method::DELETE).body(Body::empty()))
+    }
+
+    fn put(uri: &str, json: &str) -> impl FnOnce(Builder) -> Result<Request<Body>, http::Error> {
+        let s = uri.to_string();
+        let t = json.to_string();
+
+        Box::new(move |r: Builder| {
+            let rq = r
+                .uri(s)
+                .method(Method::PUT)
+                .header("Content-Type", "application/json")
+                .body(t.into());
+            rq
+        })
+    }
+
     #[tokio::test]
     async fn replace_existing_recipe() -> TestResult {
-        let repository = Arc::new(RwLock::new(Repository::new()));
-        let lasagne: Recipe = fixture::LASAGNE.parse()?;
+        // given
+        let mut testbed = Testbed::new();
 
-        let id = {
-            let mut w = repository.write().unwrap();
-            w.insert(&lasagne)?
-        };
+        let mut vegetarische_lasagne: Recipe = fixture::LASAGNE.parse()?;
+        vegetarische_lasagne.title = "Vegetarische Lasagne".to_string();
 
-        let request = Request::builder()
-            .method(Method::PUT)
-            .uri(format!("/cookbook/recipe/{}", id))
-            .header("Content-Type", "application/json")
-            .body(fixture::LASAGNE.into())?;
+        let id = testbed.write_state(|r| r.insert(&vegetarische_lasagne))?;
 
-        let mut app = router(repository.clone());
-        let service = app.ready().await?;
-        let response = service.call(request).await?;
+        // when
+        let uri = format!("/cookbook/recipe/{id}");
+        let put_response = testbed.send_to_server(put(&uri, &fixture::LASAGNE)).await?;
+        assert_eq!(put_response.status(), StatusCode::NO_CONTENT);
 
-        assert_eq!(response.status(), StatusCode::OK);
+        // then
+        let get_response = testbed.send_to_server(get(&uri)).await?;
+        assert_eq!(get_response.status(), StatusCode::OK);
+
+        let body = to_bytes(get_response.into_body()).await?;
+        let normale_lasagne: Recipe = serde_json::from_slice(&body)?;
+
+        assert_ne!(normale_lasagne, vegetarische_lasagne);
+
         Ok(())
     }
 
     #[tokio::test]
     async fn delete_non_existing_recipe() -> TestResult {
-        let repository = Arc::new(RwLock::new(Repository::new()));
+        let mut testbed = Testbed::new();
 
         let id = Uuid::new_v4();
+        let uri = format!("/cookbook/recipe/{id}");
 
-        let request = Request::builder()
-            .method(Method::DELETE)
-            .uri(format!("/cookbook/recipe/{}", id))
-            .body(Body::empty())?;
+        let response = testbed.send_to_server(delete(&uri)).await?;
 
-        let mut app = router(repository.clone());
-        let service = app.ready().await?;
-        let response = service.call(request).await?;
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_exiting_recipe_refactored() -> TestResult {
+        let mut testbed = Testbed::new();
+
+        let id = testbed.write_state(|w| w.insert(&fixture::LASAGNE.parse().unwrap()))?;
+        let uri = format!("/cookbook/recipe/{id}");
+
+        let response = testbed.send_to_server(delete(&uri)).await?;
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
