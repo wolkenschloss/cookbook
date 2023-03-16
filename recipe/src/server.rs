@@ -266,6 +266,24 @@ mod test {
 
     #[tokio::test]
     async fn delete_exiting_recipe() -> TestResult {
+        let repository = Arc::new(RwLock::new(Repository::new()));
+
+        let id = {
+            let mut w = repository.write().unwrap();
+            w.insert(&fixture::LASAGNE.parse()?)?
+        };
+
+        let request = Request::builder()
+            .method(Method::DELETE)
+            .uri(format!("/cookbook/recipe/{}", id))
+            .body(Body::empty())?;
+
+        let mut app = router(repository.clone());
+        let service = app.ready().await?;
+        let response = service.call(request).await?;
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
         Ok(())
     }
 }
