@@ -163,5 +163,10 @@ pub async fn recipe_put(
     }
 }
 
-pub async fn recipe_delete(State(_state): State<AppState>, Path(_id): Path<Uuid>) {}
+pub async fn recipe_delete(
+    State(_state): State<AppState>,
+    Path(_id): Path<Uuid>,
+) -> impl IntoResponse {
+    StatusCode::NO_CONTENT
+}
 pub async fn recipe_share(State(_state): State<AppState>) {}

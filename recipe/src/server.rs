@@ -1,3 +1,4 @@
+#![deny(warnings)]
 use std::sync::{Arc, RwLock};
 
 use axum::{routing, Router};
@@ -71,6 +72,7 @@ mod test {
     use recipers::{Recipe, TableOfContents};
 
     use recipers::repository::Repository;
+    use uuid::Uuid;
 
     use crate::router;
 
@@ -219,7 +221,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn update_existing_recipe() -> TestResult {
+    async fn replace_existing_recipe() -> TestResult {
         let repository = Arc::new(RwLock::new(Repository::new()));
         let lasagne: Recipe = fixture::LASAGNE.parse()?;
 
@@ -239,6 +241,31 @@ mod test {
         let response = service.call(request).await?;
 
         assert_eq!(response.status(), StatusCode::OK);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_non_existing_recipe() -> TestResult {
+        let repository = Arc::new(RwLock::new(Repository::new()));
+
+        let id = Uuid::new_v4();
+
+        let request = Request::builder()
+            .method(Method::DELETE)
+            .uri(format!("/cookbook/recipe/{}", id))
+            .body(Body::empty())?;
+
+        let mut app = router(repository.clone());
+        let service = app.ready().await?;
+        let response = service.call(request).await?;
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_exiting_recipe() -> TestResult {
         Ok(())
     }
 }
