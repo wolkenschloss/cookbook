@@ -18,8 +18,9 @@ pub struct Search {
     q: Option<String>,
 }
 
-#[derive(Serialize)]
-struct TableOfContents {
+#[cfg_attr(test, derive(Deserialize))]
+#[derive(Debug, Serialize, PartialEq)]
+pub struct TableOfContents {
     total: u64,
     content: Vec<Content>,
 }
@@ -46,8 +47,9 @@ impl From<&(&recipers::TableOfContents, &Vec<&str>)> for TableOfContents {
     }
 }
 
-#[derive(Serialize)]
-struct Content {
+#[cfg_attr(test, derive(Deserialize))]
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Content {
     title: String,
     #[serde(rename = "recipeId")]
     recipe_id: Uuid,
@@ -55,8 +57,9 @@ struct Content {
     links: Links,
 }
 
-#[derive(Serialize)]
-struct Links {
+#[cfg_attr(test, derive(Deserialize))]
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Links {
     #[serde(rename = "self")]
     myself: Link,
 }
@@ -74,8 +77,9 @@ impl Links {
     }
 }
 
-#[derive(Serialize)]
-struct Link {
+#[cfg_attr(test, derive(Deserialize))]
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Link {
     href: String,
 }
 
@@ -96,7 +100,7 @@ pub async fn recipes_get(
     }
 
     let repository = state.read().unwrap();
-    let toc = repository.list2(&it, &search).map_err(internal_error)?;
+    let toc = repository.list(&it, &search).map_err(internal_error)?;
     let path = &vec!["cookbook", "recipe"];
     let pair = (&toc, path);
     Ok(Json(TableOfContents::from(&pair)))
@@ -149,9 +153,9 @@ pub async fn recipe_put(
     let result = repository.update(&id, payload).map_err(internal_error)?;
 
     match result {
-        UpdateResult::Created => Ok(StatusCode::OK.into_response()),
+        UpdateResult::Created => Ok(StatusCode::CREATED.into_response()),
         UpdateResult::Changed => Ok((
-            StatusCode::CREATED,
+            StatusCode::OK,
             [(header::LOCATION, format!("/cookbook/recipe/{}", id))],
             Json(id),
         )

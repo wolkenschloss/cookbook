@@ -43,15 +43,35 @@ impl TableOfContents {
             content: vec![],
         }
     }
+
+    pub fn some() -> TableOfContents {
+        TableOfContents {
+            total: 1,
+            content: vec![Summary {
+                id: Uuid::new_v4(),
+                title: "My summary".into(),
+            }],
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Recipe {
-    title: String,
+    pub title: String,
     #[serde(default)]
     preparation: String,
     servings: u8,
     ingredients: Vec<Ingredient>,
+}
+
+use std::str::FromStr;
+
+impl FromStr for Recipe {
+    type Err = serde_json::error::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
+    }
 }
 
 #[cfg(test)]
@@ -59,6 +79,7 @@ mod test {
     use super::*;
 
     use spucky::spec;
+    mod fixture;
 
     spec! {
         serialize_json {
@@ -71,7 +92,7 @@ mod test {
                     ingredients: vec![Ingredient { name: "Pasta".into(), quantity: rat!(5, 3), unit: "pc".into()}],
                 };
 
-                let want = include_str!("fixture/lasagne.json");
+                let want = fixture::LASAGNE;
             }
 
             let got = serde_json::to_string_pretty(&recipe).unwrap();
@@ -85,7 +106,7 @@ mod test {
         deserialize_recipe
          {
             case lasagne {
-                let json = include_str!("fixture/lasagne.json");
+                let json = fixture::LASAGNE;
                 let want = Recipe {
                     title: "Lasagne".into(),
                     preparation: "Du weist schon wie".into(),

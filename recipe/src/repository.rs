@@ -159,10 +159,10 @@ impl Repository {
         Ok(id)
     }
 
-    pub fn list_ids(&self, range: &Range) -> Vec<Uuid> {
-        let keys: &Vec<Uuid> = &self.entries.keys().cloned().collect();
-
-        range.index(keys).into()
+    /// Adds all recipes to the repository and returns
+    /// a Vector of Idents.
+    pub fn insert_all(&mut self, recipes: &[Recipe]) -> Result<Vec<Uuid>, RepositoryError> {
+        recipes.iter().map(|r| self.insert(&r)).collect()
     }
 
     /// Creates a table of contents for the specified filter
@@ -171,24 +171,7 @@ impl Repository {
     /// The recipes are sorted by name. All recipes that start with
     /// "search" are included in the table of contents. The table of
     /// contents contains all the recipes within the given range.
-    pub fn list(&self, range: &Range, search: &str) -> Result<TableOfContents, RepositoryError> {
-        let mut summaries: Vec<Summary> = self
-            .entries
-            .iter()
-            .map(|entity| entity.into())
-            .filter(|s: &Summary| s.title.starts_with(search))
-            .collect();
-
-        summaries.sort();
-        let content: Vec<Summary> = range.index(&summaries).into();
-
-        Ok(TableOfContents {
-            total: self.entries.len() as u64,
-            content,
-        })
-    }
-
-    pub fn list2(
+    pub fn list(
         &self,
         range: &(Bound<u64>, Bound<u64>),
         search: &str,
@@ -273,7 +256,7 @@ pub enum UpdateResult {
 mod test {
     use std::ops::Bound;
 
-    use super::{Range, Repository, RepositoryError};
+    use super::Repository;
     use crate::Recipe;
     use spucky::spec;
 
@@ -310,42 +293,42 @@ mod test {
         list_filled_repository {
 
             case case1 {
-                let range = Range::Unbounded;
+                let range = (Bound::Unbounded, Bound::Unbounded);
                 let want = 100;
             }
 
             case case2  {
-                let range = Range::LeftClosed { start: 0 };
+                let range = (Bound::Included(0), Bound::Unbounded);
                 let want = 100;
             }
 
             case case3 {
-                let range = Range::RightClosed { end: 99 };
+                let range = (Bound::Unbounded, Bound::Included(99));
                 let want = 100;
             }
 
             case case4 {
-                let range = Range::Closed { start: 0, end: 99 };
+                let range = (Bound::Included(0), Bound::Included(99));
                 let want=  100;
             }
 
             case case5 {
-                let range = Range::Closed {start: 2, end: 1};
+                let range = (Bound::Included(2), Bound::Included(1));
                 let want = 0;
             }
 
             case case6 {
-                let range = Range::Closed {start: 99, end: 100};
+                let range = (Bound::Included(99), Bound::Included(100));
                 let want = 1;
             }
 
             case case7 {
-                let range = Range::Closed {start: 99, end: 99};
+                let range = (Bound::Included(99), Bound::Included(99));
                 let want = 1;
             }
 
             case case8 {
-                let range = Range::Closed {start: 0, end: 0};
+                let range = (Bound::Included(0), Bound::Included(0));
                 let want = 1;
             }
 
@@ -363,7 +346,7 @@ mod test {
     spec! {
         list_empty_repository {
             case case1 {
-                let range = Range::Closed {start: 0, end: 0};
+                let range = (Bound::Included(0), Bound::Included(0));
                 let want = 0;
             }
 
@@ -373,42 +356,6 @@ mod test {
                 Err(_) => panic!("unexpected error",)
             }
         }
-    }
-
-    #[test]
-    fn list_some_keys() -> Result<(), RepositoryError> {
-        let mut repository = Repository::new();
-        fill_with_testdata(&mut repository);
-
-        struct Testcase {
-            range: Range,
-            want: usize,
-        }
-
-        let td3: Vec<Testcase> = vec![
-            Testcase {
-                range: Range::Unbounded,
-                want: 100,
-            },
-            Testcase {
-                range: Range::LeftClosed { start: 0 },
-                want: 100,
-            },
-            Testcase {
-                range: Range::RightClosed { end: 99 },
-                want: 100,
-            },
-            Testcase {
-                range: Range::Closed { start: 0, end: 99 },
-                want: 100,
-            },
-        ];
-
-        for testcase in &td3 {
-            let keys = repository.list_ids(&testcase.range);
-            assert_eq!(keys.len(), testcase.want)
-        }
-        Ok(())
     }
 
     fn fill_with_testdata(repository: &mut Repository) {
