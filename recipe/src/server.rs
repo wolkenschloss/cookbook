@@ -63,21 +63,17 @@ mod handler;
 mod test {
 
     use std::error::Error;
-    use std::fmt::Debug;
 
     use std::sync::{Arc, RwLock, RwLockWriteGuard};
 
     use axum::body::BoxBody;
-    use axum::response::Response;
 
     use axum::Router;
     use http::request::Builder;
-    use http::Method;
+    use http::{Method, Request};
 
-    use hyper::{body::to_bytes, Request};
     use hyper::{Body, StatusCode};
     use recipers::{Recipe, TableOfContents};
-    use serde::de::DeserializeOwned;
 
     use uuid::Uuid;
 
@@ -90,7 +86,7 @@ mod test {
     mod assertion;
     mod fixture;
 
-    type TestResult = Result<(), Box<dyn Error>>;
+    use crate::test::assertion::TestResult;
 
     #[tokio::test]
     async fn get_toc_empty() -> TestResult {
@@ -103,8 +99,8 @@ mod test {
             })
             .await?
             .then()
-            .validate_status(StatusCode::OK)?
-            .body_eq(&TableOfContents::empty())
+            .status(StatusCode::OK)?
+            .body(&TableOfContents::empty())
             .await?;
 
         // Der Response Body darf nur einmal gelesen werden, sonst
@@ -150,8 +146,8 @@ mod test {
             })
             .await?
             .then()
-            .validate_status(StatusCode::OK)?
-            .body_eq(&want)
+            .status(StatusCode::OK)?
+            .body(&want)
             .await?;
 
         Ok(())
@@ -175,8 +171,8 @@ mod test {
                 .when(|r| r.uri(&uri).body(Body::empty()))
                 .await?
                 .then()
-                .validate_status(StatusCode::OK)?
-                .body_eq(want)
+                .status(StatusCode::OK)?
+                .body(want)
                 .await?;
         }
 
@@ -198,7 +194,7 @@ mod test {
             })
             .await?
             .then()
-            .validate_status(StatusCode::CREATED)?;
+            .status(StatusCode::CREATED)?;
 
         let res = testbed.read(&id);
         let recipe = res.unwrap();
@@ -213,23 +209,23 @@ mod test {
         _app: Router,
     }
 
-    struct ResponseAssert {
-        response: Response,
-    }
+    // struct ResponseAssert {
+    //     response: Response,
+    // }
 
-    impl ResponseAssert {
-        #[allow(dead_code)]
-        async fn body_ne<T: DeserializeOwned + PartialEq + Debug>(self, want: &T) {
-            let got: T = self.extract_body::<T>().await;
-            assert_ne!(got, *want);
-        }
+    // impl ResponseAssert {
+    //     // #[allow(dead_code)]
+    //     // async fn body_ne<T: DeserializeOwned + PartialEq + Debug>(self, want: &T) {
+    //     //     let got: T = self.extract_body::<T>().await;
+    //     //     assert_ne!(got, *want);
+    //     // }
 
-        async fn extract_body<T: DeserializeOwned + PartialEq + Debug>(self) -> T {
-            let body = self.response.into_body();
-            let bytes = to_bytes(body).await.unwrap();
-            serde_json::from_slice(&bytes).unwrap()
-        }
-    }
+    //     // async fn extract_body<T: DeserializeOwned + PartialEq + Debug>(self) -> T {
+    //     //     let body = self.response.into_body();
+    //     //     let bytes = to_bytes(body).await.unwrap();
+    //     //     serde_json::from_slice(&bytes).unwrap()
+    //     // }
+    // }
 
     impl Testbed {
         fn new() -> Testbed {
@@ -288,7 +284,7 @@ mod test {
             })
             .await?
             .then()
-            .validate_status(StatusCode::NO_CONTENT)?;
+            .status(StatusCode::NO_CONTENT)?;
 
         let normale_lasagne = testbed.read(&id).unwrap().unwrap();
         assert_ne!(normale_lasagne, vegetarische_lasagne);
@@ -307,7 +303,7 @@ mod test {
             .when(|r| r.uri(&uri).method(Method::DELETE).body(Body::empty()))
             .await?
             .then()
-            .validate_status(StatusCode::NO_CONTENT)?;
+            .status(StatusCode::NO_CONTENT)?;
 
         Ok(())
     }
@@ -323,7 +319,7 @@ mod test {
             .when(|r| r.uri(&uri).method(Method::DELETE).body(Body::empty()))
             .await?
             .then()
-            .validate_status(StatusCode::NO_CONTENT)?;
+            .status(StatusCode::NO_CONTENT)?;
 
         Ok(())
     }
@@ -349,8 +345,8 @@ mod test {
         // TODO: validate header
         let recipe: String = ready
             .then()
-            .validate_status(StatusCode::NOT_FOUND)?
-            .validate_header(|m| m.get(http::header::LOCATION).is_none())?
+            .status(StatusCode::NOT_FOUND)?
+            .header(|m| m.get(http::header::LOCATION).is_none())?
             .extract()
             .await?;
 
@@ -375,7 +371,7 @@ mod test {
             })
             .await?
             .then()
-            .validate_status(StatusCode::NO_CONTENT)?;
+            .status(StatusCode::NO_CONTENT)?;
 
         Ok(())
     }

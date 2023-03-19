@@ -1,13 +1,13 @@
-use std::{
-    error::{self, Error},
-    fmt,
-    str::from_utf8,
-};
+use std::{error::Error, fmt, str::from_utf8};
 
 use axum::{body::BoxBody, response::Response};
 use http::{HeaderMap, StatusCode};
 use hyper::body::to_bytes;
 use serde::de::DeserializeOwned;
+
+pub type AssertionError = Box<dyn Error>;
+pub type TestResult = Result<(), Box<dyn Error>>;
+
 #[derive(Debug)]
 pub enum ResponseValidationError {
     DeserializeError(serde_json::error::Error, axum::body::Bytes),
@@ -52,7 +52,7 @@ pub struct ResponseValidator {
 
 impl ResponseValidator {
     #[track_caller]
-    pub fn validate_status(self, code: StatusCode) -> Result<Self, ResponseValidationError> {
+    pub fn status(self, code: StatusCode) -> Result<Self, ResponseValidationError> {
         if self.response.status() != code {
             let caller_location = std::panic::Location::caller().clone();
             let line = caller_location.line();
@@ -67,7 +67,7 @@ impl ResponseValidator {
             Ok(self)
         }
     }
-    pub fn validate_header<F>(self, predicate: F) -> Result<Self, ResponseValidationError>
+    pub fn header<F>(self, predicate: F) -> Result<Self, ResponseValidationError>
     where
         F: FnOnce(&HeaderMap) -> bool,
     {
@@ -78,17 +78,17 @@ impl ResponseValidator {
         }
     }
 
-    pub async fn extract<T: DeserializeOwned>(self) -> Result<T, Box<dyn error::Error>> {
+    pub async fn extract<T: DeserializeOwned>(self) -> Result<T, AssertionError> {
         let body = self.response.into_body();
         let bytes = to_bytes(body).await?;
         serde_json::from_slice(&bytes)
             .map_err(|_err| ResponseValidationError::DeserializeError(_err, bytes).into())
     }
 
-    pub async fn body_eq<T: DeserializeOwned + PartialEq>(
+    pub async fn body<T: DeserializeOwned + PartialEq>(
         self,
         want: &T,
-    ) -> Result<(), Box<dyn error::Error>> {
+    ) -> Result<(), AssertionError> {
         let body = self.response.into_body();
         let bytes = to_bytes(body).await?;
         let body: T = serde_json::from_slice(&bytes)
