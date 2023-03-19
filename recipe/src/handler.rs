@@ -83,11 +83,13 @@ pub struct Link {
     href: String,
 }
 
+type VendorError = (StatusCode, Json<String>);
+
 pub async fn recipes_get(
     State(state): State<AppState>,
     Query(parameter): Query<Search>,
     TypedHeader(range): TypedHeader<Range>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<Json<TableOfContents>, VendorError> {
     let search = parameter.q.unwrap_or("".into());
 
     let it: (Bound<u64>, Bound<u64>) = range
@@ -99,30 +101,31 @@ pub async fn recipes_get(
         tracing::debug!("found range {:?}", r)
     }
 
-    let repository = state.read().unwrap();
+    let repository = state.read().map_err(internal_error)?;
     let toc = repository.list(&it, &search).map_err(internal_error)?;
     let path = &vec!["cookbook", "recipe"];
     let pair = (&toc, path);
+
     Ok(Json(TableOfContents::from(&pair)))
 }
 
 /// Utility function for mapping any error into a `500 Internal Server Error`
 /// response.
-fn internal_error<E>(err: E) -> (StatusCode, String)
+fn internal_error<E>(err: E) -> VendorError
 where
     E: std::error::Error,
 {
-    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+    (StatusCode::INTERNAL_SERVER_ERROR, Json(err.to_string()))
 }
 
 pub async fn recipes_post(
     State(state): State<AppState>,
     Json(payload): Json<Recipe>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, VendorError> {
     println!("recipes post called");
     println!("got recipe {:?}", payload);
 
-    let mut repository = state.write().unwrap();
+    let mut repository = state.write().map_err(internal_error)?;
     let id = repository.insert(&payload).map_err(internal_error)?;
 
     Ok((
@@ -135,12 +138,12 @@ pub async fn recipes_post(
 pub async fn recipe_get(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let repository = state.read().map_err(internal_error)?;
+) -> Result<Json<Recipe>, VendorError> {
+    let repository = state.read().map_err(internal_error).unwrap();
     let recipe = repository.get(&id).map_err(internal_error)?;
     match recipe {
         Some(result) => Ok(Json(result.clone())),
-        None => Err((StatusCode::NOT_FOUND, "recipe not found".to_owned())),
+        None => Err((StatusCode::NOT_FOUND, Json("recipe not found".to_owned()))),
     }
 }
 
@@ -148,7 +151,7 @@ pub async fn recipe_put(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(payload): Json<Recipe>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, VendorError> {
     let mut repository = state.write().unwrap();
     let result = repository.update(&id, payload).map_err(internal_error)?;
 

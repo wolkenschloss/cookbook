@@ -63,7 +63,6 @@ mod handler;
 mod test {
 
     use std::error::Error;
-
     use std::fmt::Debug;
 
     use std::sync::{Arc, RwLock, RwLockWriteGuard};
@@ -72,7 +71,8 @@ mod test {
 
     use axum::Router;
     use http::request::Builder;
-    use http::Method;
+    use http::{HeaderMap, Method};
+
     use hyper::{body::to_bytes, Request};
     use hyper::{Body, StatusCode};
     use recipers::{Recipe, TableOfContents};
@@ -326,9 +326,127 @@ mod test {
         Ok(())
     }
 
+    use std::{error, fmt, str::from_utf8};
+
+    #[derive(Debug)]
+    enum ResponseValidationError {
+        DeserializeError(serde_json::error::Error, axum::body::Bytes),
+        StatusCode {
+            location: String,
+            want: StatusCode,
+            got: StatusCode,
+        },
+        Header,
+    }
+
+    impl fmt::Display for ResponseValidationError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                ResponseValidationError::DeserializeError(err, b) => {
+                    write!(f, "Deserialization error: {:?}", err.to_string())?;
+                    write!(f, "bytes: {:?}", from_utf8(b))
+                }
+                ResponseValidationError::StatusCode {
+                    location,
+                    want,
+                    got,
+                } => {
+                    write!(f, "{location}: want status code {want}, got {got}")
+                }
+                ResponseValidationError::Header => {
+                    write!(f, "header validation error")
+                }
+            }
+        }
+    }
+
+    impl Error for ResponseValidationError {}
+
+    struct ResponseValidator {
+        response: Response<axum::body::BoxBody>,
+    }
+
+    impl ResponseValidator {
+        #[track_caller]
+        fn validate_status(self, code: StatusCode) -> Result<Self, ResponseValidationError> {
+            if self.response.status() != code {
+                let caller_location = std::panic::Location::caller().clone();
+                let line = caller_location.line();
+                let file = caller_location.file();
+                let column = caller_location.column();
+                Err(ResponseValidationError::StatusCode {
+                    location: format!("{file}:{line}:{column}"),
+                    want: code,
+                    got: self.response.status(),
+                })
+            } else {
+                Ok(self)
+            }
+        }
+        fn validate_header<F>(self, predicate: F) -> Result<Self, ResponseValidationError>
+        where
+            F: FnOnce(&HeaderMap) -> bool,
+        {
+            if predicate(&self.response.headers()) {
+                Ok(self)
+            } else {
+                Err(ResponseValidationError::Header)
+            }
+        }
+
+        async fn extract<T: DeserializeOwned>(self) -> Result<T, Box<dyn error::Error>> {
+            let body = self.response.into_body();
+            let bytes = to_bytes(body).await?;
+            serde_json::from_slice(&bytes)
+                .map_err(|_err| ResponseValidationError::DeserializeError(_err, bytes).into())
+        }
+    }
+
+    trait ResponseExt {
+        fn then(self) -> ResponseValidator;
+    }
+
+    impl ResponseExt for Response<axum::body::BoxBody> {
+        fn then(self) -> ResponseValidator {
+            ResponseValidator { response: self }
+        }
+    }
+
+    #[test]
+    fn deserialize_string() -> TestResult {
+        let result: String = serde_json::from_str(r#""this is valid json""#)?;
+        println!("{:?}", result);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_another_recipe() -> TestResult {
+        let state = Arc::new(RwLock::new(Repository::new()));
+        let mut r = router(state);
+        let id = Uuid::new_v4();
+        let request = Request::builder()
+            .uri(format!("/cookbook/recipe/{id}"))
+            .body(Body::empty())
+            .unwrap();
+
+        let ready = r.ready().await?.call(request).await?;
+        // TODO: validate header
+        let recipe: String = ready
+            .then()
+            .validate_status(StatusCode::NOT_FOUND)?
+            .validate_header(|m| m.get(http::header::LOCATION).is_none())?
+            .extract()
+            .await?;
+
+        println!("Response : {:?}", recipe);
+
+        Ok(())
+    }
+
     #[tokio::test]
     async fn delete_exiting_recipe() -> TestResult {
         let mut testbed = Testbed::new();
+
         let id = testbed.write().insert(&fixture::LASAGNE.parse()?)?;
 
         testbed
