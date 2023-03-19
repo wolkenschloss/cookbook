@@ -67,11 +67,12 @@ mod test {
 
     use std::sync::{Arc, RwLock, RwLockWriteGuard};
 
+    use axum::body::BoxBody;
     use axum::response::Response;
 
     use axum::Router;
     use http::request::Builder;
-    use http::{HeaderMap, Method};
+    use http::Method;
 
     use hyper::{body::to_bytes, Request};
     use hyper::{Body, StatusCode};
@@ -86,6 +87,7 @@ mod test {
     use tower::Service;
     use tower::ServiceExt;
 
+    mod assertion;
     mod fixture;
 
     type TestResult = Result<(), Box<dyn Error>>;
@@ -99,10 +101,11 @@ mod test {
                     .header("Range", "bytes=0-9")
                     .body(Body::empty())
             })
-            .await
-            .status_eq(StatusCode::OK)
+            .await?
+            .then()
+            .validate_status(StatusCode::OK)?
             .body_eq(&TableOfContents::empty())
-            .await;
+            .await?;
 
         // Der Response Body darf nur einmal gelesen werden, sonst
         // gibt es einen Fehler. Die Funktion into_body() konsumiert
@@ -145,10 +148,11 @@ mod test {
                     .header("Range", "bytes=0-9")
                     .body(Body::empty())
             })
-            .await
-            .status_eq(StatusCode::OK)
+            .await?
+            .then()
+            .validate_status(StatusCode::OK)?
             .body_eq(&want)
-            .await;
+            .await?;
 
         Ok(())
     }
@@ -169,10 +173,11 @@ mod test {
 
             testbed
                 .when(|r| r.uri(&uri).body(Body::empty()))
-                .await
-                .status_eq(StatusCode::OK)
+                .await?
+                .then()
+                .validate_status(StatusCode::OK)?
                 .body_eq(want)
-                .await;
+                .await?;
         }
 
         Ok(())
@@ -191,8 +196,9 @@ mod test {
                     .header("Content-Type", "application/json")
                     .body(fixture::LASAGNE.into())
             })
-            .await
-            .status_eq(StatusCode::CREATED);
+            .await?
+            .then()
+            .validate_status(StatusCode::CREATED)?;
 
         let res = testbed.read(&id);
         let recipe = res.unwrap();
@@ -212,16 +218,6 @@ mod test {
     }
 
     impl ResponseAssert {
-        fn status_eq(self, want: StatusCode) -> Self {
-            assert_eq!(self.response.status(), want);
-            self
-        }
-
-        async fn body_eq<T: DeserializeOwned + PartialEq + Debug>(self, want: &T) {
-            let got: T = self.extract_body::<T>().await;
-            assert_eq!(got, *want);
-        }
-
         #[allow(dead_code)]
         async fn body_ne<T: DeserializeOwned + PartialEq + Debug>(self, want: &T) {
             let got: T = self.extract_body::<T>().await;
@@ -254,7 +250,10 @@ mod test {
             Ok(opt.cloned())
         }
 
-        async fn when<F>(&mut self, f: F) -> ResponseAssert
+        async fn when<F>(
+            &mut self,
+            f: F,
+        ) -> Result<http::Response<BoxBody>, std::convert::Infallible>
         where
             F: FnOnce(Builder) -> Result<Request<Body>, http::Error>,
         {
@@ -263,8 +262,8 @@ mod test {
             let req = f(builder).unwrap();
             // Das ist ein Hack.
 
-            let response = service.call(req).await.unwrap();
-            ResponseAssert { response }
+            let x = service.call(req).await;
+            x
         }
     }
 
@@ -287,8 +286,9 @@ mod test {
                     .header("Content-Type", "application/json")
                     .body(fixture::LASAGNE.into())
             })
-            .await
-            .status_eq(StatusCode::NO_CONTENT);
+            .await?
+            .then()
+            .validate_status(StatusCode::NO_CONTENT)?;
 
         let normale_lasagne = testbed.read(&id).unwrap().unwrap();
         assert_ne!(normale_lasagne, vegetarische_lasagne);
@@ -305,8 +305,9 @@ mod test {
 
         testbed
             .when(|r| r.uri(&uri).method(Method::DELETE).body(Body::empty()))
-            .await
-            .status_eq(StatusCode::NO_CONTENT);
+            .await?
+            .then()
+            .validate_status(StatusCode::NO_CONTENT)?;
 
         Ok(())
     }
@@ -320,96 +321,11 @@ mod test {
 
         testbed
             .when(|r| r.uri(&uri).method(Method::DELETE).body(Body::empty()))
-            .await
-            .status_eq(StatusCode::NO_CONTENT);
+            .await?
+            .then()
+            .validate_status(StatusCode::NO_CONTENT)?;
 
         Ok(())
-    }
-
-    use std::{error, fmt, str::from_utf8};
-
-    #[derive(Debug)]
-    enum ResponseValidationError {
-        DeserializeError(serde_json::error::Error, axum::body::Bytes),
-        StatusCode {
-            location: String,
-            want: StatusCode,
-            got: StatusCode,
-        },
-        Header,
-    }
-
-    impl fmt::Display for ResponseValidationError {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                ResponseValidationError::DeserializeError(err, b) => {
-                    write!(f, "Deserialization error: {:?}", err.to_string())?;
-                    write!(f, "bytes: {:?}", from_utf8(b))
-                }
-                ResponseValidationError::StatusCode {
-                    location,
-                    want,
-                    got,
-                } => {
-                    write!(f, "{location}: want status code {want}, got {got}")
-                }
-                ResponseValidationError::Header => {
-                    write!(f, "header validation error")
-                }
-            }
-        }
-    }
-
-    impl Error for ResponseValidationError {}
-
-    struct ResponseValidator {
-        response: Response<axum::body::BoxBody>,
-    }
-
-    impl ResponseValidator {
-        #[track_caller]
-        fn validate_status(self, code: StatusCode) -> Result<Self, ResponseValidationError> {
-            if self.response.status() != code {
-                let caller_location = std::panic::Location::caller().clone();
-                let line = caller_location.line();
-                let file = caller_location.file();
-                let column = caller_location.column();
-                Err(ResponseValidationError::StatusCode {
-                    location: format!("{file}:{line}:{column}"),
-                    want: code,
-                    got: self.response.status(),
-                })
-            } else {
-                Ok(self)
-            }
-        }
-        fn validate_header<F>(self, predicate: F) -> Result<Self, ResponseValidationError>
-        where
-            F: FnOnce(&HeaderMap) -> bool,
-        {
-            if predicate(&self.response.headers()) {
-                Ok(self)
-            } else {
-                Err(ResponseValidationError::Header)
-            }
-        }
-
-        async fn extract<T: DeserializeOwned>(self) -> Result<T, Box<dyn error::Error>> {
-            let body = self.response.into_body();
-            let bytes = to_bytes(body).await?;
-            serde_json::from_slice(&bytes)
-                .map_err(|_err| ResponseValidationError::DeserializeError(_err, bytes).into())
-        }
-    }
-
-    trait ResponseExt {
-        fn then(self) -> ResponseValidator;
-    }
-
-    impl ResponseExt for Response<axum::body::BoxBody> {
-        fn then(self) -> ResponseValidator {
-            ResponseValidator { response: self }
-        }
     }
 
     #[test]
@@ -443,6 +359,7 @@ mod test {
         Ok(())
     }
 
+    use crate::test::assertion::ResponseExt;
     #[tokio::test]
     async fn delete_exiting_recipe() -> TestResult {
         let mut testbed = Testbed::new();
@@ -456,8 +373,9 @@ mod test {
                     .uri(format!("/cookbook/recipe/{}", id))
                     .body(Body::empty())
             })
-            .await
-            .status_eq(StatusCode::NO_CONTENT);
+            .await?
+            .then()
+            .validate_status(StatusCode::NO_CONTENT)?;
 
         Ok(())
     }
