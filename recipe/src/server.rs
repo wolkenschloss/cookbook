@@ -180,6 +180,32 @@ mod test {
     }
 
     #[tokio::test]
+    async fn create_new_recipe() -> TestResult {
+        let mut testbed = Testbed::new();
+
+        let location = testbed
+            .when(|request| {
+                request
+                    .uri("/cookbook/recipe")
+                    .method(Method::POST)
+                    .header("Content-Type", "application/json")
+                    .body(fixture::CHILI.into())
+            })
+            .await?
+            .then()
+            .status(StatusCode::CREATED)?
+            .get_location()?;
+
+        testbed
+            .when(|request| request.uri(location).body(Body::empty()))
+            .await?
+            .then()
+            .status(StatusCode::OK)?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn update_new_recipe() -> TestResult {
         let mut testbed = Testbed::new();
         let id = uuid::Uuid::new_v4();
@@ -209,24 +235,6 @@ mod test {
         _app: Router,
     }
 
-    // struct ResponseAssert {
-    //     response: Response,
-    // }
-
-    // impl ResponseAssert {
-    //     // #[allow(dead_code)]
-    //     // async fn body_ne<T: DeserializeOwned + PartialEq + Debug>(self, want: &T) {
-    //     //     let got: T = self.extract_body::<T>().await;
-    //     //     assert_ne!(got, *want);
-    //     // }
-
-    //     // async fn extract_body<T: DeserializeOwned + PartialEq + Debug>(self) -> T {
-    //     //     let body = self.response.into_body();
-    //     //     let bytes = to_bytes(body).await.unwrap();
-    //     //     serde_json::from_slice(&bytes).unwrap()
-    //     // }
-    // }
-
     impl Testbed {
         fn new() -> Testbed {
             let state = Arc::new(RwLock::new(Repository::new()));
@@ -240,10 +248,13 @@ mod test {
             self.state.write().unwrap()
         }
 
-        fn read<'a>(&'a self, id: &Uuid) -> Result<Option<Recipe>, Box<dyn Error + '_>> {
+        fn read(&self, id: &Uuid) -> Result<Option<Recipe>, Box<dyn Error + '_>> {
             let r = self.state.read()?;
-            let opt = r.get(id)?;
-            Ok(opt.cloned())
+            if let Some(recipe) = r.get(id)? {
+                Ok(Some(recipe.clone()))
+            } else {
+                Ok(None)
+            }
         }
 
         async fn when<F>(
@@ -256,10 +267,8 @@ mod test {
             let service = self._app.ready().await.unwrap();
             let builder = Request::builder();
             let req = f(builder).unwrap();
-            // Das ist ein Hack.
 
-            let x = service.call(req).await;
-            x
+            service.call(req).await
         }
     }
 
@@ -321,6 +330,8 @@ mod test {
             .then()
             .status(StatusCode::NO_CONTENT)?;
 
+        let none = testbed.read(&id).unwrap();
+        assert!(none.is_none());
         Ok(())
     }
 

@@ -12,7 +12,7 @@ extern crate lazy_static;
 struct Ingredient {
     name: String,
     quantity: Rational,
-    unit: String,
+    unit: Option<String>,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize, Deserialize)]
@@ -89,7 +89,7 @@ mod test {
                     title: "Lasagne".into(),
                     preparation: "Du weist schon wie".into(),
                     servings: 4,
-                    ingredients: vec![Ingredient { name: "Pasta".into(), quantity: rat!(5, 3), unit: "pc".into()}],
+                    ingredients: vec![Ingredient { name: "Pasta".into(), quantity: rat!(5, 3), unit: Some("pc".into())}],
                 };
 
                 let want = fixture::LASAGNE;
@@ -111,7 +111,7 @@ mod test {
                     title: "Lasagne".into(),
                     preparation: "Du weist schon wie".into(),
                     servings: 4,
-                    ingredients: vec![Ingredient {name: "Pasta".into(), quantity: rat!(5, 3), unit: "pc".into()}]
+                    ingredients: vec![Ingredient {name: "Pasta".into(), quantity: rat!(5, 3), unit: Some("pc".into())}]
                 };
             }
 

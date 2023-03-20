@@ -1,0 +1,12 @@
+{
+  "title": "Chili con carne",
+  "preparation": "Fleisch kochen, Gemüse dazu",
+  "servings": 4,
+  "ingredients": [
+    {
+      "name": "Rindergehacktes",
+      "quantity": "1",
+      "unit": null
+    }
+  ]
+}

@@ -67,6 +67,19 @@ impl ResponseValidator {
             Ok(self)
         }
     }
+
+    pub fn get_location(self) -> Result<String, ResponseValidationError> {
+        if let Some(location) = self.response.headers().get(http::header::LOCATION) {
+            if let Ok(s) = location.to_str() {
+                Ok(s.to_string())
+            } else {
+                Err(ResponseValidationError::Header)
+            }
+        } else {
+            Err(ResponseValidationError::Header)
+        }
+    }
+
     pub fn header<F>(self, predicate: F) -> Result<Self, ResponseValidationError>
     where
         F: FnOnce(&HeaderMap) -> bool,

@@ -152,7 +152,7 @@ pub async fn recipe_put(
     Path(id): Path<Uuid>,
     Json(payload): Json<Recipe>,
 ) -> Result<impl IntoResponse, VendorError> {
-    let mut repository = state.write().unwrap();
+    let mut repository = state.write().map_err(internal_error)?;
     let result = repository.update(&id, payload).map_err(internal_error)?;
 
     match result {
@@ -167,9 +167,13 @@ pub async fn recipe_put(
 }
 
 pub async fn recipe_delete(
-    State(_state): State<AppState>,
-    Path(_id): Path<Uuid>,
-) -> impl IntoResponse {
-    StatusCode::NO_CONTENT
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, VendorError> {
+    let mut repository = state.write().map_err(internal_error)?;
+    repository.remove(&id).map_err(internal_error)?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
+
 pub async fn recipe_share(State(_state): State<AppState>) {}
