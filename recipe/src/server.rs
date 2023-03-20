@@ -63,7 +63,7 @@ mod handler;
 mod test {
 
     use std::error::Error;
-
+    use std::fmt;
     use std::sync::{Arc, RwLock, RwLockWriteGuard};
 
     use axum::body::BoxBody;
@@ -222,9 +222,7 @@ mod test {
             .then()
             .status(StatusCode::CREATED)?;
 
-        let res = testbed.read(&id);
-        let recipe = res.unwrap();
-
+        let recipe = testbed.read(&id)?;
         assert!(recipe.is_some());
 
         Ok(())
@@ -234,6 +232,17 @@ mod test {
         state: AppState,
         _app: Router,
     }
+
+    #[derive(Clone, Debug)]
+    struct FatalTestError;
+
+    impl fmt::Display for FatalTestError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "fatal test error")
+        }
+    }
+
+    impl Error for FatalTestError {}
 
     impl Testbed {
         fn new() -> Testbed {
@@ -248,13 +257,20 @@ mod test {
             self.state.write().unwrap()
         }
 
-        fn read(&self, id: &Uuid) -> Result<Option<Recipe>, Box<dyn Error + '_>> {
-            let r = self.state.read()?;
-            if let Some(recipe) = r.get(id)? {
-                Ok(Some(recipe.clone()))
-            } else {
-                Ok(None)
+        fn read(&self, id: &Uuid) -> Result<Option<Recipe>, Box<dyn Error>> {
+            match self.state.read() {
+                Ok(_lock) => {
+                    let _rec = _lock.get(id)?;
+                    Ok(_rec.cloned())
+                }
+                Err(_err) => Err(Box::new(FatalTestError {})),
             }
+
+            // let state = self.state.read().unwrap();
+
+            // let _result = state.get(id)?;
+
+            // Ok(None)
         }
 
         async fn when<F>(
@@ -295,8 +311,8 @@ mod test {
             .then()
             .status(StatusCode::NO_CONTENT)?;
 
-        let normale_lasagne = testbed.read(&id).unwrap().unwrap();
-        assert_ne!(normale_lasagne, vegetarische_lasagne);
+        let normale_lasagne = testbed.read(&id)?;
+        assert_ne!(normale_lasagne, Some(vegetarische_lasagne));
 
         Ok(())
     }
@@ -330,8 +346,8 @@ mod test {
             .then()
             .status(StatusCode::NO_CONTENT)?;
 
-        let none = testbed.read(&id).unwrap();
-        assert!(none.is_none());
+        let recipe = testbed.read(&id)?;
+        assert!(recipe.is_none());
         Ok(())
     }
 
