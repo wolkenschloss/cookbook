@@ -7,20 +7,22 @@ use crate::{repository::BoundExt, Recipe, Summary, TableOfContents};
 use super::{RepositoryError, UpdateResult};
 
 /// An in-memory repository for recipes
-pub struct Repository {
+pub struct Ephemeral {
     entries: HashMap<Uuid, Recipe>,
 }
 
-impl Repository {
+impl Ephemeral {
     /// Creates a new repository
-    pub fn new() -> Repository {
-        Repository {
+    pub fn new() -> Ephemeral {
+        Ephemeral {
             entries: HashMap::new(),
         }
     }
+}
 
+impl super::Repository for Ephemeral {
     /// Adds a recipe to the repository
-    pub fn insert(&mut self, r: &Recipe) -> Result<Uuid, RepositoryError> {
+    fn insert(&mut self, r: &Recipe) -> Result<Uuid, RepositoryError> {
         let id = Uuid::new_v4();
         self.entries.insert(id, r.clone());
         Ok(id)
@@ -28,7 +30,7 @@ impl Repository {
 
     /// Adds all recipes to the repository and returns
     /// a Vector of Idents.
-    pub fn insert_all(&mut self, recipes: &[Recipe]) -> Result<Vec<Uuid>, RepositoryError> {
+    fn insert_all(&mut self, recipes: &[Recipe]) -> Result<Vec<Uuid>, RepositoryError> {
         recipes.iter().map(|r| self.insert(&r)).collect()
     }
 
@@ -38,7 +40,7 @@ impl Repository {
     /// The recipes are sorted by name. All recipes that start with
     /// "search" are included in the table of contents. The table of
     /// contents contains all the recipes within the given range.
-    pub fn list(
+    fn list(
         &self,
         range: &(Bound<u64>, Bound<u64>),
         search: &str,
@@ -79,16 +81,16 @@ impl Repository {
         })
     }
 
-    pub fn get(&self, id: &Uuid) -> Result<Option<&Recipe>, RepositoryError> {
+    fn get(&self, id: &Uuid) -> Result<Option<&Recipe>, RepositoryError> {
         Ok(self.entries.get(&id))
     }
 
-    pub fn remove(&mut self, id: &Uuid) -> Result<(), RepositoryError> {
+    fn remove(&mut self, id: &Uuid) -> Result<(), RepositoryError> {
         self.entries.remove(&id);
         Ok(())
     }
 
-    pub fn update(&mut self, id: &Uuid, recipe: Recipe) -> Result<UpdateResult, RepositoryError> {
+    fn update(&mut self, id: &Uuid, recipe: Recipe) -> Result<UpdateResult, RepositoryError> {
         match self.entries.insert(*id, recipe) {
             Some(_) => Ok(UpdateResult::Changed),
             None => Ok(UpdateResult::Created),

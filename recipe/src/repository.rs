@@ -4,8 +4,26 @@ use std::{
     error, fmt,
     ops::{Bound, RangeBounds, Sub},
 };
+use uuid::Uuid;
+
+use crate::{Recipe, TableOfContents};
 
 pub mod memory;
+
+pub trait Repository {
+    fn insert(&mut self, r: &Recipe) -> Result<Uuid, RepositoryError>;
+    fn insert_all(&mut self, recipes: &[Recipe]) -> Result<Vec<Uuid>, RepositoryError>;
+    fn list(
+        &self,
+        range: &(Bound<u64>, Bound<u64>),
+        search: &str,
+    ) -> Result<TableOfContents, RepositoryError>;
+
+    fn get(&self, id: &Uuid) -> Result<Option<&Recipe>, RepositoryError>;
+    fn remove(&mut self, id: &Uuid) -> Result<(), RepositoryError>;
+    fn update(&mut self, id: &Uuid, recipe: Recipe) -> Result<UpdateResult, RepositoryError>;
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum Range {
     Empty,
@@ -163,7 +181,9 @@ pub enum UpdateResult {
 mod test {
     use std::ops::Bound;
 
-    use super::memory::Repository;
+    use super::memory::Ephemeral;
+    use super::Repository;
+
     use crate::Recipe;
     use spucky::spec;
 
@@ -178,7 +198,7 @@ mod test {
 
     #[test]
     fn test_insert() -> Result<(), Box<dyn std::error::Error>> {
-        let mut repo = Repository::new();
+        let mut repo = Ephemeral::new();
 
         let recipe = Recipe {
             title: "Lasagne".to_string(),
@@ -239,7 +259,7 @@ mod test {
                 let want = 1;
             }
 
-            let mut repository = Repository::new();
+            let mut repository = Ephemeral::new();
             fill_with_testdata(&mut repository);
 
             match repository.list(&range, "") {
@@ -257,7 +277,7 @@ mod test {
                 let want = 0;
             }
 
-            let repository = Repository::new();
+            let repository = Ephemeral::new();
             match repository.list(&range, "") {
                 Ok(toc) => assert_eq!(toc.content.len(), want),
                 Err(_) => panic!("unexpected error",)
@@ -265,7 +285,7 @@ mod test {
         }
     }
 
-    fn fill_with_testdata(repository: &mut Repository) {
+    fn fill_with_testdata(repository: &mut Ephemeral) {
         for ele in 0..100 {
             let recipe = Recipe {
                 title: format!("Recipe {}", ele),
@@ -273,6 +293,7 @@ mod test {
                 servings: (ele % 3) + 1,
                 ingredients: vec![],
             };
+
             _ = repository.insert(&recipe);
         }
     }
@@ -285,16 +306,6 @@ mod test {
         let got = &data[range];
         assert_eq!(got, &data[..])
     }
-
-    // #[test]
-    // fn include_range_experiment() {
-    //     let data = [1, 2, 3, 4, 5];
-    //     let range = (Bound::<u64>::Unbounded, Bound::Included(5u64));
-
-    //     let got = &data[range];
-
-    //     assert_eq!(got, &data[..=3])
-    // }
 
     #[test]
     fn len_as_index_experiment() {

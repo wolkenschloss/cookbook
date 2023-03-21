@@ -2,7 +2,7 @@
 use std::sync::{Arc, RwLock};
 
 use axum::{routing, Router};
-use recipers::repository::memory::Repository;
+use recipers::repository::{memory::Ephemeral, Repository};
 
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -21,7 +21,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let repository = Arc::new(RwLock::new(Repository::new()));
+    let repo = Ephemeral::new();
+    let repository: AppState = Arc::new(RwLock::new(Box::new(repo)));
+
+    //overfluid
+    // let id = uuid::Uuid::new_v4();
+    // repository.write()?.get(&id);
+
     let app = router(repository.clone());
     tracing::debug!("listening to 0.0.0.0:8080");
     axum::Server::bind(&"0.0.0.0:8080".parse().unwrap())
@@ -55,7 +61,7 @@ fn router(state: AppState) -> Router {
         )
 }
 
-type AppState = Arc<RwLock<Repository>>;
+type AppState = Arc<RwLock<Box<dyn Repository + Send + Sync>>>;
 
 mod handler;
 
@@ -78,7 +84,8 @@ mod test {
     use uuid::Uuid;
 
     use crate::{router, AppState};
-    use recipers::repository::memory::Repository;
+    use recipers::repository::memory::Ephemeral;
+    use recipers::repository::Repository;
 
     use tower::Service;
     use tower::ServiceExt;
@@ -122,7 +129,7 @@ mod test {
 
         // given all recipes in repository
         let all_recipes = fixture::all_recipes()?;
-        let ids = testbed.write()?.insert_all(&all_recipes)?;
+        let ids = { testbed.write()?.insert_all(&all_recipes)? };
 
         let want = TableOfContents {
             total: all_recipes.len() as u64,
@@ -240,7 +247,7 @@ mod test {
 
     impl Testbed {
         fn new() -> Testbed {
-            let state = Arc::new(RwLock::new(Repository::new()));
+            let state: AppState = Arc::new(RwLock::new(Box::new(Ephemeral::new())));
             Testbed {
                 state: state.clone(),
                 _app: router(state.clone()),
@@ -251,7 +258,9 @@ mod test {
         ///
         /// The function returns an error if an error occurred while attempting to
         /// obtain write access to the status.
-        fn write(&mut self) -> Result<RwLockWriteGuard<Repository>, Box<dyn Error>> {
+        fn write(
+            &mut self,
+        ) -> Result<RwLockWriteGuard<Box<dyn Repository + Send + Sync>>, Box<dyn Error>> {
             match self.state.write() {
                 Err(_) => Err(Box::new(FatalTestError)),
                 Ok(guard) => Ok(guard),
