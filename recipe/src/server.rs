@@ -168,7 +168,7 @@ mod test {
             let want = all_recipes.iter().find(|r| r.title == "Lasagne").unwrap();
 
             testbed
-                .when(|r| r.uri(&uri).body(Body::empty()))
+                .get(&uri)
                 .await?
                 .then()
                 .status(StatusCode::OK)?
@@ -184,13 +184,7 @@ mod test {
         let mut testbed = Testbed::new();
 
         let location = testbed
-            .when(|request| {
-                request
-                    .uri("/cookbook/recipe")
-                    .method(Method::POST)
-                    .header("Content-Type", "application/json")
-                    .body(fixture::CHILI.into())
-            })
+            .post("/cookbook/recipe", fixture::CHILI)
             .await?
             .then()
             .status(StatusCode::CREATED)?
@@ -265,12 +259,6 @@ mod test {
                 }
                 Err(_err) => Err(Box::new(FatalTestError {})),
             }
-
-            // let state = self.state.read().unwrap();
-
-            // let _result = state.get(id)?;
-
-            // Ok(None)
         }
 
         async fn when<F>(
@@ -285,6 +273,48 @@ mod test {
             let req = f(builder).unwrap();
 
             service.call(req).await
+        }
+
+        async fn delete(&mut self, uri: &str) -> Result<http::Response<BoxBody>, Box<dyn Error>> {
+            let request = Request::builder()
+                .uri(uri)
+                .method(Method::DELETE)
+                .body(Body::empty())?;
+
+            self.send(request).await
+        }
+
+        async fn get(&mut self, uri: &str) -> Result<http::Response<BoxBody>, Box<dyn Error>> {
+            let request = Request::builder()
+                .uri(uri)
+                .method(Method::GET)
+                .body(Body::empty())?;
+
+            self.send(request).await
+        }
+
+        async fn post(
+            &mut self,
+            uri: &str,
+            body: &str,
+        ) -> Result<http::Response<BoxBody>, Box<dyn Error>> {
+            let body = body.to_owned();
+            let request = Request::builder()
+                .uri(uri)
+                .method(Method::POST)
+                .header("Content-Type", "application/json")
+                .body(body.into())?;
+            self.send(request).await
+        }
+
+        async fn send(
+            &mut self,
+            request: Request<Body>,
+        ) -> Result<http::Response<BoxBody>, Box<dyn Error>> {
+            let service = self._app.ready().await?;
+            let result = service.call(request).await?;
+
+            Ok(result)
         }
     }
 
@@ -325,7 +355,7 @@ mod test {
         let uri = format!("/cookbook/recipe/{id}");
 
         testbed
-            .when(|r| r.uri(&uri).method(Method::DELETE).body(Body::empty()))
+            .delete(&uri)
             .await?
             .then()
             .status(StatusCode::NO_CONTENT)?;
@@ -341,7 +371,7 @@ mod test {
         let uri = format!("/cookbook/recipe/{id}");
 
         testbed
-            .when(|r| r.uri(&uri).method(Method::DELETE).body(Body::empty()))
+            .delete(&uri)
             .await?
             .then()
             .status(StatusCode::NO_CONTENT)?;
@@ -351,34 +381,24 @@ mod test {
         Ok(())
     }
 
-    #[test]
-    fn deserialize_string() -> TestResult {
-        let result: String = serde_json::from_str(r#""this is valid json""#)?;
-        println!("{:?}", result);
-        Ok(())
-    }
-
     #[tokio::test]
     async fn get_another_recipe() -> TestResult {
-        let state = Arc::new(RwLock::new(Repository::new()));
-        let mut r = router(state);
-        let id = Uuid::new_v4();
-        let request = Request::builder()
-            .uri(format!("/cookbook/recipe/{id}"))
-            .body(Body::empty())
-            .unwrap();
+        let mut testbed = Testbed::new();
 
-        let ready = r.ready().await?.call(request).await?;
-        // TODO: validate header
-        let recipe: String = ready
+        let id = Uuid::new_v4();
+        let uri = format!("/cookbook/recipe/{id}");
+
+        // let recipe: String =
+        let got: String = testbed
+            .get(&uri)
+            .await?
             .then()
             .status(StatusCode::NOT_FOUND)?
             .header(|m| m.get(http::header::LOCATION).is_none())?
             .extract()
             .await?;
 
-        println!("Response : {:?}", recipe);
-
+        assert_eq!(got, "recipe not found");
         Ok(())
     }
 
@@ -390,12 +410,7 @@ mod test {
         let id = testbed.write().insert(&fixture::LASAGNE.parse()?)?;
 
         testbed
-            .when(|request| {
-                request
-                    .method(Method::DELETE)
-                    .uri(format!("/cookbook/recipe/{}", id))
-                    .body(Body::empty())
-            })
+            .delete(&format!("/cookbook/recipe/{id}"))
             .await?
             .then()
             .status(StatusCode::NO_CONTENT)?;
