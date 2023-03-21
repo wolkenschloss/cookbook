@@ -2,7 +2,7 @@
 use std::sync::{Arc, RwLock};
 
 use axum::{routing, Router};
-use recipers::repository::Repository;
+use recipers::repository::memory::Repository;
 
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -78,7 +78,7 @@ mod test {
     use uuid::Uuid;
 
     use crate::{router, AppState};
-    use recipers::repository::Repository;
+    use recipers::repository::memory::Repository;
 
     use tower::Service;
     use tower::ServiceExt;
