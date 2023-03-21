@@ -2,7 +2,7 @@ use crate::rational::Rational;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-mod rational;
+pub mod rational;
 pub mod repository;
 
 #[macro_use]
@@ -12,13 +12,13 @@ extern crate lazy_static;
 struct Ingredient {
     name: String,
     quantity: Rational,
-    unit: String,
+    unit: Option<String>,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize)]
-struct Summary {
-    title: String,
-    id: Uuid,
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, Serialize, Deserialize)]
+pub struct Summary {
+    pub title: String,
+    pub id: Uuid,
 }
 
 impl Into<Summary> for (&Uuid, &Recipe) {
@@ -30,19 +30,48 @@ impl Into<Summary> for (&Uuid, &Recipe) {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct TableOfContents {
-    total: usize,
-    content: Vec<Summary>,
+    pub total: u64,
+    pub content: Vec<Summary>,
+}
+
+impl TableOfContents {
+    pub fn empty() -> TableOfContents {
+        TableOfContents {
+            total: 0,
+            content: vec![],
+        }
+    }
+
+    pub fn some() -> TableOfContents {
+        TableOfContents {
+            total: 1,
+            content: vec![Summary {
+                id: Uuid::new_v4(),
+                title: "My summary".into(),
+            }],
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 pub struct Recipe {
-    title: String,
+    pub title: String,
     #[serde(default)]
     preparation: String,
     servings: u8,
     ingredients: Vec<Ingredient>,
+}
+
+use std::str::FromStr;
+
+impl FromStr for Recipe {
+    type Err = serde_json::error::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
+    }
 }
 
 #[cfg(test)]
@@ -50,6 +79,7 @@ mod test {
     use super::*;
 
     use spucky::spec;
+    mod fixture;
 
     spec! {
         serialize_json {
@@ -59,10 +89,10 @@ mod test {
                     title: "Lasagne".into(),
                     preparation: "Du weist schon wie".into(),
                     servings: 4,
-                    ingredients: vec![Ingredient { name: "Pasta".into(), quantity: rat!(5, 3), unit: "pc".into()}],
+                    ingredients: vec![Ingredient { name: "Pasta".into(), quantity: rat!(5, 3), unit: Some("pc".into())}],
                 };
 
-                let want = include_str!("fixture/lasagne.json");
+                let want = fixture::LASAGNE;
             }
 
             let got = serde_json::to_string_pretty(&recipe).unwrap();
@@ -76,12 +106,12 @@ mod test {
         deserialize_recipe
          {
             case lasagne {
-                let json = include_str!("fixture/lasagne.json");
+                let json = fixture::LASAGNE;
                 let want = Recipe {
                     title: "Lasagne".into(),
                     preparation: "Du weist schon wie".into(),
                     servings: 4,
-                    ingredients: vec![Ingredient {name: "Pasta".into(), quantity: rat!(5, 3), unit: "pc".into()}]
+                    ingredients: vec![Ingredient {name: "Pasta".into(), quantity: rat!(5, 3), unit: Some("pc".into())}]
                 };
             }
 
