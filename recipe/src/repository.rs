@@ -230,7 +230,9 @@ impl Repository {
 }
 
 #[derive(Debug)]
-pub enum RepositoryError {}
+pub enum RepositoryError {
+    Poison,
+}
 
 impl IntoResponse for RepositoryError {
     fn into_response(self) -> axum::response::Response {
