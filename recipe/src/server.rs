@@ -122,7 +122,7 @@ mod test {
 
         // given all recipes in repository
         let all_recipes = fixture::all_recipes()?;
-        let ids = testbed.write().insert_all(&all_recipes)?;
+        let ids = testbed.write()?.insert_all(&all_recipes)?;
 
         let want = TableOfContents {
             total: all_recipes.len() as u64,
@@ -158,7 +158,7 @@ mod test {
         let mut testbed = Testbed::new();
         let all_recipes = fixture::all_recipes()?;
 
-        let ids = testbed.write().insert_all(&all_recipes)?;
+        let ids = testbed.write()?.insert_all(&all_recipes)?;
 
         // when
 
@@ -247,8 +247,15 @@ mod test {
             }
         }
 
-        fn write(&mut self) -> RwLockWriteGuard<Repository> {
-            self.state.write().unwrap()
+        /// The function allows write access to the internal status of the application.
+        ///
+        /// The function returns an error if an error occurred while attempting to
+        /// obtain write access to the status.
+        fn write(&mut self) -> Result<RwLockWriteGuard<Repository>, Box<dyn Error>> {
+            match self.state.write() {
+                Err(_) => Err(Box::new(FatalTestError)),
+                Ok(guard) => Ok(guard),
+            }
         }
 
         fn read(&self, id: &Uuid) -> Result<Option<Recipe>, Box<dyn Error>> {
@@ -307,6 +314,20 @@ mod test {
             self.send(request).await
         }
 
+        async fn put(
+            &mut self,
+            uri: &str,
+            body: &str,
+        ) -> Result<http::Response<BoxBody>, Box<dyn Error>> {
+            let body = body.to_owned();
+            let request = Request::builder()
+                .uri(uri)
+                .method(Method::PUT)
+                .header("Content-Type", "application/json")
+                .body(body.into())?;
+
+            self.send(request).await
+        }
         async fn send(
             &mut self,
             request: Request<Body>,
@@ -326,17 +347,12 @@ mod test {
         let mut vegetarische_lasagne: Recipe = fixture::LASAGNE.parse()?;
         vegetarische_lasagne.title = "Vegetarische Lasagne".to_string();
 
-        let id = testbed.write().insert(&vegetarische_lasagne)?;
+        let id = testbed.write()?.insert(&vegetarische_lasagne)?;
 
         // when
         let uri = format!("/cookbook/recipe/{id}");
         testbed
-            .when(|r| {
-                r.uri(&uri)
-                    .method(Method::PUT)
-                    .header("Content-Type", "application/json")
-                    .body(fixture::LASAGNE.into())
-            })
+            .put(&uri, fixture::LASAGNE)
             .await?
             .then()
             .status(StatusCode::NO_CONTENT)?;
@@ -367,7 +383,9 @@ mod test {
     async fn delete_exiting_recipe_refactored() -> TestResult {
         let mut testbed = Testbed::new();
 
-        let id = testbed.write().insert(&fixture::LASAGNE.parse().unwrap())?;
+        let id = testbed
+            .write()?
+            .insert(&fixture::LASAGNE.parse().unwrap())?;
         let uri = format!("/cookbook/recipe/{id}");
 
         testbed
@@ -407,7 +425,7 @@ mod test {
     async fn delete_exiting_recipe() -> TestResult {
         let mut testbed = Testbed::new();
 
-        let id = testbed.write().insert(&fixture::LASAGNE.parse()?)?;
+        let id = testbed.write()?.insert(&fixture::LASAGNE.parse()?)?;
 
         testbed
             .delete(&format!("/cookbook/recipe/{id}"))
