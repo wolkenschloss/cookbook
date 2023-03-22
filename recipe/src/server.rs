@@ -2,7 +2,7 @@
 use std::sync::{Arc, RwLock};
 
 use axum::{routing, Router};
-use recipers::repository::{memory::Ephemeral, Repository};
+use recipers::repository::Repository;
 
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -10,6 +10,16 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use crate::handler::{
     recipe_delete, recipe_get, recipe_put, recipe_share, recipes_get, recipes_post,
 };
+
+#[cfg(feature = "ephemeral")]
+fn create_repository() -> impl Repository {
+    recipers::repository::memory::Repository::new()
+}
+
+#[cfg(all(not(feature = "ephemeral"), feature = "mongodb"))]
+fn create_repository() -> impl Repository {
+    recipers::repository::mongodb::MongoDbClient {}
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,12 +31,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let repo = Ephemeral::new();
+    let repo = create_repository();
     let repository: AppState = Arc::new(RwLock::new(Box::new(repo)));
-
-    //overfluid
-    // let id = uuid::Uuid::new_v4();
-    // repository.write()?.get(&id);
 
     let app = router(repository.clone());
     tracing::debug!("listening to 0.0.0.0:8080");
@@ -83,8 +89,7 @@ mod test {
 
     use uuid::Uuid;
 
-    use crate::{router, AppState};
-    use recipers::repository::memory::Ephemeral;
+    use crate::{create_repository, router, AppState};
     use recipers::repository::Repository;
 
     use tower::Service;
@@ -97,7 +102,9 @@ mod test {
 
     #[tokio::test]
     async fn get_toc_empty() -> TestResult {
-        let mut testbed = Testbed::new();
+        let repository = create_repository();
+        let mut testbed = Testbed::with_repository(Box::new(repository));
+
         testbed
             .when(|r| {
                 r.uri("/cookbook/recipe")
@@ -247,7 +254,16 @@ mod test {
 
     impl Testbed {
         fn new() -> Testbed {
-            let state: AppState = Arc::new(RwLock::new(Box::new(Ephemeral::new())));
+            let repository = create_repository();
+            let state: AppState = Arc::new(RwLock::new(Box::new(repository)));
+            Testbed {
+                state: state.clone(),
+                _app: router(state.clone()),
+            }
+        }
+
+        fn with_repository(repository: Box<dyn Repository + Send + Sync>) -> Testbed {
+            let state: AppState = Arc::new(RwLock::new(repository));
             Testbed {
                 state: state.clone(),
                 _app: router(state.clone()),

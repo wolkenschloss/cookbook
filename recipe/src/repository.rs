@@ -8,7 +8,11 @@ use uuid::Uuid;
 
 use crate::{Recipe, TableOfContents};
 
+#[cfg(feature = "ephemeral")]
 pub mod memory;
+
+#[cfg(all(not(feature = "ephemeral"), feature = "mongodb"))]
+pub mod mongodb;
 
 pub trait Repository {
     fn insert(&mut self, r: &Recipe) -> Result<Uuid, RepositoryError>;
@@ -181,7 +185,6 @@ pub enum UpdateResult {
 mod test {
     use std::ops::Bound;
 
-    use super::memory::Ephemeral;
     use super::Repository;
 
     use crate::Recipe;
@@ -196,9 +199,19 @@ mod test {
         }];
     }
 
+    #[cfg(feature = "ephemeral")]
+    fn create_repository() -> impl Repository {
+        super::memory::Repository::new()
+    }
+
+    #[cfg(all(not(feature = "ephemeral"), feature = "mongodb"))]
+    fn create_repository() -> impl Repository {
+        super::mongodb::MongoDbClient {}
+    }
+
     #[test]
     fn test_insert() -> Result<(), Box<dyn std::error::Error>> {
-        let mut repo = Ephemeral::new();
+        let mut repo = create_repository(); // Repository::new();
 
         let recipe = Recipe {
             title: "Lasagne".to_string(),
@@ -259,7 +272,7 @@ mod test {
                 let want = 1;
             }
 
-            let mut repository = Ephemeral::new();
+            let mut repository = create_repository();// Repository::new();
             fill_with_testdata(&mut repository);
 
             match repository.list(&range, "") {
@@ -277,7 +290,7 @@ mod test {
                 let want = 0;
             }
 
-            let repository = Ephemeral::new();
+            let repository = create_repository();// Repository::new();
             match repository.list(&range, "") {
                 Ok(toc) => assert_eq!(toc.content.len(), want),
                 Err(_) => panic!("unexpected error",)
@@ -285,7 +298,7 @@ mod test {
         }
     }
 
-    fn fill_with_testdata(repository: &mut Ephemeral) {
+    fn fill_with_testdata(repository: &mut impl Repository) {
         for ele in 0..100 {
             let recipe = Recipe {
                 title: format!("Recipe {}", ele),

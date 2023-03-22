@@ -7,20 +7,20 @@ use crate::{repository::BoundExt, Recipe, Summary, TableOfContents};
 use super::{RepositoryError, UpdateResult};
 
 /// An in-memory repository for recipes
-pub struct Ephemeral {
+pub struct Repository {
     entries: HashMap<Uuid, Recipe>,
 }
 
-impl Ephemeral {
+impl Repository {
     /// Creates a new repository
-    pub fn new() -> Ephemeral {
-        Ephemeral {
+    pub fn new() -> Repository {
+        Repository {
             entries: HashMap::new(),
         }
     }
 }
 
-impl super::Repository for Ephemeral {
+impl super::Repository for Repository {
     /// Adds a recipe to the repository
     fn insert(&mut self, r: &Recipe) -> Result<Uuid, RepositoryError> {
         let id = Uuid::new_v4();
