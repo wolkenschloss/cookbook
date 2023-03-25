@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
-use syn::{braced, parse_macro_input, token, Block, Ident, ItemType, Stmt, Token};
+use syn::{braced, parse_macro_input, token, Attribute, Block, Ident, ItemType, Stmt, Token};
 
 /// Mit dem Spec Macro werden Testfälle beschrieben und ausführbare
 /// Tests generiert.
@@ -82,6 +82,7 @@ pub fn spec(input: TokenStream) -> TokenStream {
     let spec = parse_macro_input!(input as Spec);
     let spec_name = &spec.ident;
     let body = spec.body.stmts;
+    let attrs = spec.attrs;
     let opt_ret_type = spec.body.output;
 
     let tests = spec.body.cases.into_iter().map(|c| {
@@ -93,6 +94,7 @@ pub fn spec(input: TokenStream) -> TokenStream {
                 let ty = ret_type.ty.clone();
                 quote! {
                     #[test]
+                    #(#attrs)*
                     fn #ident() -> #ty {
                         #(#prelude)*
                         #(#body)*
@@ -102,6 +104,7 @@ pub fn spec(input: TokenStream) -> TokenStream {
             None => {
                 quote! {
                     #[test]
+                    #(#attrs)*
                     fn #ident() {
                         #(#prelude)*
                         #(#body)*
@@ -124,17 +127,20 @@ pub fn spec(input: TokenStream) -> TokenStream {
 struct Spec {
     ident: Ident,
     body: SpecBody,
+    attrs: Vec<Attribute>,
 }
 
 impl Parse for Spec {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let content;
 
+        let attrs: Vec<Attribute> = input.call(Attribute::parse_outer)?;
+
         let ident: Ident = input.parse()?;
         let _brace_token: token::Brace = braced!(content in input);
 
         let body = content.call(SpecBody::parse)?;
-        Ok(Spec { ident, body })
+        Ok(Spec { ident, body, attrs })
     }
 }
 

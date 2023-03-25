@@ -11,6 +11,19 @@ use crate::handler::{
     recipe_delete, recipe_get, recipe_put, recipe_share, recipes_get, recipes_post,
 };
 
+#[cfg(feature = "ephemeral")]
+fn create_repository() -> impl Repository {
+    recipers::repository::memory::Repository::new()
+}
+
+#[cfg(all(not(feature = "ephemeral"), feature = "mongodb"))]
+fn create_repository() -> impl Repository {
+    let result = recipers::repository::mongodb::MongoDbClient::new();
+    let client = result.unwrap();
+    client.collection.drop(None).expect("db must be empty");
+    client
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::registry()
@@ -21,7 +34,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let repository = Arc::new(RwLock::new(Repository::new()));
+    let repo = create_repository();
+    let repository: AppState = Arc::new(RwLock::new(Box::new(repo)));
+
     let app = router(repository.clone());
     tracing::debug!("listening to 0.0.0.0:8080");
     axum::Server::bind(&"0.0.0.0:8080".parse().unwrap())
@@ -55,7 +70,7 @@ fn router(state: AppState) -> Router {
         )
 }
 
-type AppState = Arc<RwLock<Repository>>;
+type AppState = Arc<RwLock<Box<dyn Repository + Send + Sync>>>;
 
 mod handler;
 
@@ -77,7 +92,7 @@ mod test {
 
     use uuid::Uuid;
 
-    use crate::{router, AppState};
+    use crate::{create_repository, router, AppState};
     use recipers::repository::Repository;
 
     use tower::Service;
@@ -90,7 +105,10 @@ mod test {
 
     #[tokio::test]
     async fn get_toc_empty() -> TestResult {
-        let mut testbed = Testbed::new();
+        let repository = create_repository();
+
+        let mut testbed = Testbed::with_repository(Box::new(repository));
+
         testbed
             .when(|r| {
                 r.uri("/cookbook/recipe")
@@ -100,7 +118,11 @@ mod test {
             .await?
             .then()
             .status(StatusCode::OK)?
-            .body(&TableOfContents::empty())
+            // .body(&TableOfContents::empty())
+            .body(&crate::handler::TableOfContents {
+                total: 0,
+                content: vec![],
+            })
             .await?;
 
         // Der Response Body darf nur einmal gelesen werden, sonst
@@ -122,7 +144,7 @@ mod test {
 
         // given all recipes in repository
         let all_recipes = fixture::all_recipes()?;
-        let ids = testbed.write()?.insert_all(&all_recipes)?;
+        let ids = { testbed.write()?.insert_all(&all_recipes)? };
 
         let want = TableOfContents {
             total: all_recipes.len() as u64,
@@ -240,7 +262,16 @@ mod test {
 
     impl Testbed {
         fn new() -> Testbed {
-            let state = Arc::new(RwLock::new(Repository::new()));
+            let repository = create_repository();
+            let state: AppState = Arc::new(RwLock::new(Box::new(repository)));
+            Testbed {
+                state: state.clone(),
+                _app: router(state.clone()),
+            }
+        }
+
+        fn with_repository(repository: Box<dyn Repository + Send + Sync>) -> Testbed {
+            let state: AppState = Arc::new(RwLock::new(repository));
             Testbed {
                 state: state.clone(),
                 _app: router(state.clone()),
@@ -251,7 +282,9 @@ mod test {
         ///
         /// The function returns an error if an error occurred while attempting to
         /// obtain write access to the status.
-        fn write(&mut self) -> Result<RwLockWriteGuard<Repository>, Box<dyn Error>> {
+        fn write(
+            &mut self,
+        ) -> Result<RwLockWriteGuard<Box<dyn Repository + Send + Sync>>, Box<dyn Error>> {
             match self.state.write() {
                 Err(_) => Err(Box::new(FatalTestError)),
                 Ok(guard) => Ok(guard),
@@ -262,7 +295,7 @@ mod test {
             match self.state.read() {
                 Ok(_lock) => {
                     let _rec = _lock.get(id)?;
-                    Ok(_rec.cloned())
+                    Ok(_rec.clone())
                 }
                 Err(_err) => Err(Box::new(FatalTestError {})),
             }

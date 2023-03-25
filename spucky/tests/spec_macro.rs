@@ -1,3 +1,4 @@
+use serial_test::serial;
 use spucky::*;
 
 spec! {
@@ -23,6 +24,31 @@ spec! {
     }
 }
 
+spec! {
+    #[ignore]
+    ignored_spec {
+        case never_run {
+
+        }
+    }
+}
+
+spec! {
+    #[serial]
+    serial_spec {
+        case one {
+
+        }
+
+        case after {
+
+        }
+
+        case the_other {
+
+        }
+    }
+}
 spec! {
     result {
         type Output = Result<(), Box<dyn std::error::Error>>;

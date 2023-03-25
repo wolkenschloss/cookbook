@@ -1,15 +1,32 @@
-use crate::Recipe;
-use crate::Summary;
-use crate::TableOfContents;
 use axum::{http::StatusCode, response::IntoResponse};
 use std::{
     cmp::min,
-    collections::HashMap,
     error, fmt,
     ops::{Bound, RangeBounds, Sub},
 };
-
 use uuid::Uuid;
+
+use crate::{Recipe, TableOfContents};
+
+#[cfg(feature = "ephemeral")]
+pub mod memory;
+
+#[cfg(all(not(feature = "ephemeral"), feature = "mongodb"))]
+pub mod mongodb;
+
+pub trait Repository {
+    fn insert(&mut self, r: &Recipe) -> Result<Uuid, RepositoryError>;
+    fn insert_all(&mut self, recipes: &[Recipe]) -> Result<Vec<Uuid>, RepositoryError>;
+    fn list(
+        &self,
+        range: &(Bound<u64>, Bound<u64>),
+        search: &str,
+    ) -> Result<TableOfContents, RepositoryError>;
+
+    fn get(&self, id: &Uuid) -> Result<Option<Recipe>, RepositoryError>;
+    fn remove(&mut self, id: &Uuid) -> Result<(), RepositoryError>;
+    fn update(&mut self, id: &Uuid, recipe: &Recipe) -> Result<UpdateResult, RepositoryError>;
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum Range {
@@ -139,99 +156,10 @@ where
     }
 }
 
-/// An in-memory repository for recipes
-pub struct Repository {
-    entries: HashMap<Uuid, Recipe>,
-}
-
-impl Repository {
-    /// Creates a new repository
-    pub fn new() -> Repository {
-        Repository {
-            entries: HashMap::new(),
-        }
-    }
-
-    /// Adds a recipe to the repository
-    pub fn insert(&mut self, r: &Recipe) -> Result<Uuid, RepositoryError> {
-        let id = Uuid::new_v4();
-        self.entries.insert(id, r.clone());
-        Ok(id)
-    }
-
-    /// Adds all recipes to the repository and returns
-    /// a Vector of Idents.
-    pub fn insert_all(&mut self, recipes: &[Recipe]) -> Result<Vec<Uuid>, RepositoryError> {
-        recipes.iter().map(|r| self.insert(&r)).collect()
-    }
-
-    /// Creates a table of contents for the specified filter
-    /// criteria.
-    ///
-    /// The recipes are sorted by name. All recipes that start with
-    /// "search" are included in the table of contents. The table of
-    /// contents contains all the recipes within the given range.
-    pub fn list(
-        &self,
-        range: &(Bound<u64>, Bound<u64>),
-        search: &str,
-    ) -> Result<TableOfContents, RepositoryError> {
-        let mut summaries: Vec<Summary> = self
-            .entries
-            .iter()
-            .map(|entity| entity.into())
-            .filter(|s: &Summary| s.title.starts_with(search))
-            .collect();
-
-        summaries.sort();
-
-        tracing::debug!("Got range {:?}", range);
-
-        let xrange = if summaries.len() == 0 {
-            (Bound::Unbounded, Bound::Unbounded)
-        } else {
-            (
-                BoundExt::map(range.0, |f| f as usize),
-                BoundExt::map(range.1, |f| f as usize).map_raw(|f| match f {
-                    Bound::Unbounded => Bound::Unbounded,
-                    Bound::Included(x) => Bound::Included(min(x, summaries.len() - 1)),
-                    Bound::Excluded(x) => Bound::Excluded(min(x, summaries.len())),
-                }),
-            )
-        };
-
-        tracing::debug!("Transposed to {:?}", xrange);
-
-        //let content: Vec<Summary> =  range.index(&summaries).into();
-        // let content = summaries.index(xrange).into();
-        let content = summaries[xrange].into();
-
-        Ok(TableOfContents {
-            total: self.entries.len() as u64,
-            content,
-        })
-    }
-
-    pub fn get(&self, id: &Uuid) -> Result<Option<&Recipe>, RepositoryError> {
-        Ok(self.entries.get(&id))
-    }
-
-    pub fn remove(&mut self, id: &Uuid) -> Result<(), RepositoryError> {
-        self.entries.remove(&id);
-        Ok(())
-    }
-
-    pub fn update(&mut self, id: &Uuid, recipe: Recipe) -> Result<UpdateResult, RepositoryError> {
-        match self.entries.insert(*id, recipe) {
-            Some(_) => Ok(UpdateResult::Changed),
-            None => Ok(UpdateResult::Created),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum RepositoryError {
     Poison,
+    MongoDb,
 }
 
 impl IntoResponse for RepositoryError {
@@ -249,6 +177,7 @@ impl fmt::Display for RepositoryError {
 
 impl error::Error for RepositoryError {}
 
+#[derive(PartialEq, Debug)]
 pub enum UpdateResult {
     Changed,
     Created,
@@ -256,12 +185,16 @@ pub enum UpdateResult {
 
 #[cfg(test)]
 mod test {
+
     use std::ops::Bound;
 
     use super::Repository;
-    use crate::Recipe;
-    use spucky::spec;
 
+    use crate::Recipe;
+
+    use serial_test::serial;
+
+    use spucky::spec;
     lazy_static! {
         static ref TESTDATA: Vec<Recipe> = vec![Recipe {
             title: "Lasagne".to_string(),
@@ -271,9 +204,23 @@ mod test {
         }];
     }
 
+    #[cfg(feature = "ephemeral")]
+    fn create_repository() -> impl Repository {
+        super::memory::Repository::new()
+    }
+
+    #[cfg(all(not(feature = "ephemeral"), feature = "mongodb"))]
+    fn create_repository() -> impl Repository {
+        let result = super::mongodb::MongoDbClient::new();
+        let client = result.unwrap();
+        client.collection.drop(None).expect("db must be empty");
+        client
+    }
+
     #[test]
+    #[serial]
     fn test_insert() -> Result<(), Box<dyn std::error::Error>> {
-        let mut repo = Repository::new();
+        let mut repo = create_repository(); // Repository::new();
 
         let recipe = Recipe {
             title: "Lasagne".to_string(),
@@ -286,12 +233,13 @@ mod test {
 
         let copy = repo.get(&id)?;
 
-        assert_eq!(&recipe, copy.unwrap());
+        assert_eq!(recipe, copy.unwrap());
 
         Ok(())
     }
 
     spec! {
+        #[serial]
         list_filled_repository {
 
             case case1 {
@@ -334,7 +282,17 @@ mod test {
                 let want = 1;
             }
 
-            let mut repository = Repository::new();
+            case case9 {
+                let range = (Bound::Included(10), Bound::Excluded(20));
+                let want = 10;
+            }
+
+            case case10 {
+                let range = (Bound::Included(10), Bound::Included(19));
+                let want = 10;
+            }
+
+            let mut repository = create_repository();// Repository::new();
             fill_with_testdata(&mut repository);
 
             match repository.list(&range, "") {
@@ -352,7 +310,7 @@ mod test {
                 let want = 0;
             }
 
-            let repository = Repository::new();
+            let repository = create_repository();// Repository::new();
             match repository.list(&range, "") {
                 Ok(toc) => assert_eq!(toc.content.len(), want),
                 Err(_) => panic!("unexpected error",)
@@ -360,7 +318,74 @@ mod test {
         }
     }
 
-    fn fill_with_testdata(repository: &mut Repository) {
+    spec! {
+        #[ignore]
+        update_recipe {
+            type Output = Result<(), Box<dyn std::error::Error>>;
+            case update {
+                let recipe = Recipe {
+                    title: "Lasagne".to_string(),
+                    preparation: "Du weist schon wie".to_string(),
+                    servings: 4,
+                    ingredients: vec![] };
+                    let mut repository = create_repository();
+                    let id = repository.insert(&recipe)?;
+                    let want = crate::repository::UpdateResult::Changed;
+            }
+
+            case create {
+                    let id = uuid::Uuid::new_v4();
+                    let mut repository = create_repository();
+                    let want = crate::repository::UpdateResult::Created;
+            }
+
+            let chili = Recipe {
+                title: "Chili con carne".to_string(),
+                preparation: "kochen".to_string(),
+                servings: 3,
+                ingredients: vec![],
+            };
+
+            let result = repository.update(&id, &chili)?;
+            let changed = repository.get(&id)?;
+
+            assert_eq!(result, want);
+            assert_eq!(changed, Some(chili));
+
+            Ok(())
+        }
+    }
+
+    spec! {
+        delete_recipe {
+            type Output = Result<(), Box<dyn std::error::Error>>;
+
+            case existing {
+                let mut repository = create_repository();
+                let lasagne = Recipe {
+                    title: "Lasagne".to_string(),
+                    preparation: "Du weist schon wie".to_string(),
+                    servings: 4,
+                    ingredients: vec![],
+                };
+                let id = repository.insert(&lasagne)?;
+            }
+
+            case missing {
+                let mut repository = create_repository();
+                let id = uuid::Uuid::new_v4();
+            }
+
+            repository.remove(&id)?;
+
+            let result = repository.get(&id)?;
+            assert_eq!(result, None);
+
+            Ok(())
+        }
+    }
+
+    fn fill_with_testdata(repository: &mut impl Repository) {
         for ele in 0..100 {
             let recipe = Recipe {
                 title: format!("Recipe {}", ele),
@@ -368,7 +393,8 @@ mod test {
                 servings: (ele % 3) + 1,
                 ingredients: vec![],
             };
-            _ = repository.insert(&recipe);
+
+            _ = repository.insert(&recipe).unwrap();
         }
     }
 
@@ -380,16 +406,6 @@ mod test {
         let got = &data[range];
         assert_eq!(got, &data[..])
     }
-
-    // #[test]
-    // fn include_range_experiment() {
-    //     let data = [1, 2, 3, 4, 5];
-    //     let range = (Bound::<u64>::Unbounded, Bound::Included(5u64));
-
-    //     let got = &data[range];
-
-    //     assert_eq!(got, &data[..=3])
-    // }
 
     #[test]
     fn len_as_index_experiment() {

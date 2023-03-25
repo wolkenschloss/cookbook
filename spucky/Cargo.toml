@@ -9,3 +9,6 @@ proc-macro = true
 [dependencies]
 quote = "1.0"
 syn = {version = "1.0.107", features = ["parsing", "full"] }
+
+[dev-dependencies]
+serial_test ="1.0.0"
