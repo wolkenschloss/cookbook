@@ -1,4 +1,8 @@
-use std::{error::Error, fmt, str::from_utf8};
+use std::{
+    error::Error,
+    fmt::{self, Debug},
+    str::from_utf8,
+};
 
 use axum::{body::BoxBody, response::Response};
 use http::{HeaderMap, StatusCode};
@@ -98,7 +102,7 @@ impl ResponseValidator {
             .map_err(|_err| ResponseValidationError::DeserializeError(_err, bytes).into())
     }
 
-    pub async fn body<T: DeserializeOwned + PartialEq>(
+    pub async fn body<T: DeserializeOwned + PartialEq + Debug>(
         self,
         want: &T,
     ) -> Result<(), AssertionError> {
@@ -108,6 +112,7 @@ impl ResponseValidator {
             .map_err(|_err| ResponseValidationError::DeserializeError(_err, bytes))?;
 
         if &body != want {
+            println!("want {:?}, got {:?}", want, &body);
             Err(ResponseValidationError::Body.into())
         } else {
             Ok(())

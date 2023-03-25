@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 default = ["mongodb"]
-mongodb = []
+mongodb = ["dep:mongodb"]
 ephemeral = []
 
 [[bin]]
@@ -22,11 +22,12 @@ tokio = {version = "1.26", features = ["rt-multi-thread", "macros" ]}
 tower-http = { version = "0.4.0", features = ["add-extension", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-mongodb = "2.4"
+bson = {version = "*", features = ["uuid-1"]}
+mongodb = {version = "2.4", features = ["sync"], optional = true, default-features = false }
 
 [dev-dependencies]
 spucky = {path = "../spucky" }
+serial_test = "1.0"
 
 hyper = "0.14.25"
 tower = "0.4.13"

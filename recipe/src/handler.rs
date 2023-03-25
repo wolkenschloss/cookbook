@@ -21,8 +21,8 @@ pub struct Search {
 #[cfg_attr(test, derive(Deserialize))]
 #[derive(Debug, Serialize, PartialEq)]
 pub struct TableOfContents {
-    total: u64,
-    content: Vec<Content>,
+    pub total: u64,
+    pub content: Vec<Content>,
 }
 
 impl From<&(&recipers::TableOfContents, &Vec<&str>)> for TableOfContents {
@@ -153,7 +153,7 @@ pub async fn recipe_put(
     Json(payload): Json<Recipe>,
 ) -> Result<impl IntoResponse, VendorError> {
     let mut repository = state.write().map_err(internal_error)?;
-    let result = repository.update(&id, payload).map_err(internal_error)?;
+    let result = repository.update(&id, &payload).map_err(internal_error)?;
 
     match result {
         UpdateResult::Created => Ok(StatusCode::CREATED.into_response()),

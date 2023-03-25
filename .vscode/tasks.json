@@ -51,7 +51,10 @@
             "type": "cargo",
             "command": "nextest",
             "args": [
-                "run"
+                "run",
+                "--features",
+                "ephemeral",
+                "--no-default-features"
             ],
             "presentation": {
                 "reveal": "always",
@@ -64,7 +67,27 @@
                 "kind": "test",
                 "isDefault": true
             },
-            "label": "cookbook: cargo test"
+            "label": "cookbook: cargo test ephemeral"
+        },
+        {
+            "detail": "Führt alle Tests des Projekts aus.",
+            "type": "cargo",
+            "command": "nextest",
+            "args": [
+                "run",
+            ],
+            "presentation": {
+                "reveal": "always",
+                "group": "test"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": false
+            },
+            "label": "cookbook: cargo test mongodb"
         }
     ]
 }

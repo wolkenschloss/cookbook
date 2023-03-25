@@ -23,9 +23,9 @@ pub trait Repository {
         search: &str,
     ) -> Result<TableOfContents, RepositoryError>;
 
-    fn get(&self, id: &Uuid) -> Result<Option<&Recipe>, RepositoryError>;
+    fn get(&self, id: &Uuid) -> Result<Option<Recipe>, RepositoryError>;
     fn remove(&mut self, id: &Uuid) -> Result<(), RepositoryError>;
-    fn update(&mut self, id: &Uuid, recipe: Recipe) -> Result<UpdateResult, RepositoryError>;
+    fn update(&mut self, id: &Uuid, recipe: &Recipe) -> Result<UpdateResult, RepositoryError>;
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -159,6 +159,7 @@ where
 #[derive(Debug)]
 pub enum RepositoryError {
     Poison,
+    MongoDb,
 }
 
 impl IntoResponse for RepositoryError {
@@ -176,6 +177,7 @@ impl fmt::Display for RepositoryError {
 
 impl error::Error for RepositoryError {}
 
+#[derive(PartialEq, Debug)]
 pub enum UpdateResult {
     Changed,
     Created,
@@ -183,13 +185,16 @@ pub enum UpdateResult {
 
 #[cfg(test)]
 mod test {
+
     use std::ops::Bound;
 
     use super::Repository;
 
     use crate::Recipe;
-    use spucky::spec;
 
+    use serial_test::serial;
+
+    use spucky::spec;
     lazy_static! {
         static ref TESTDATA: Vec<Recipe> = vec![Recipe {
             title: "Lasagne".to_string(),
@@ -206,10 +211,14 @@ mod test {
 
     #[cfg(all(not(feature = "ephemeral"), feature = "mongodb"))]
     fn create_repository() -> impl Repository {
-        super::mongodb::MongoDbClient {}
+        let result = super::mongodb::MongoDbClient::new();
+        let client = result.unwrap();
+        client.collection.drop(None).expect("db must be empty");
+        client
     }
 
     #[test]
+    #[serial]
     fn test_insert() -> Result<(), Box<dyn std::error::Error>> {
         let mut repo = create_repository(); // Repository::new();
 
@@ -224,12 +233,13 @@ mod test {
 
         let copy = repo.get(&id)?;
 
-        assert_eq!(&recipe, copy.unwrap());
+        assert_eq!(recipe, copy.unwrap());
 
         Ok(())
     }
 
     spec! {
+        #[serial]
         list_filled_repository {
 
             case case1 {
@@ -272,6 +282,16 @@ mod test {
                 let want = 1;
             }
 
+            case case9 {
+                let range = (Bound::Included(10), Bound::Excluded(20));
+                let want = 10;
+            }
+
+            case case10 {
+                let range = (Bound::Included(10), Bound::Included(19));
+                let want = 10;
+            }
+
             let mut repository = create_repository();// Repository::new();
             fill_with_testdata(&mut repository);
 
@@ -298,6 +318,73 @@ mod test {
         }
     }
 
+    spec! {
+        #[ignore]
+        update_recipe {
+            type Output = Result<(), Box<dyn std::error::Error>>;
+            case update {
+                let recipe = Recipe {
+                    title: "Lasagne".to_string(),
+                    preparation: "Du weist schon wie".to_string(),
+                    servings: 4,
+                    ingredients: vec![] };
+                    let mut repository = create_repository();
+                    let id = repository.insert(&recipe)?;
+                    let want = crate::repository::UpdateResult::Changed;
+            }
+
+            case create {
+                    let id = uuid::Uuid::new_v4();
+                    let mut repository = create_repository();
+                    let want = crate::repository::UpdateResult::Created;
+            }
+
+            let chili = Recipe {
+                title: "Chili con carne".to_string(),
+                preparation: "kochen".to_string(),
+                servings: 3,
+                ingredients: vec![],
+            };
+
+            let result = repository.update(&id, &chili)?;
+            let changed = repository.get(&id)?;
+
+            assert_eq!(result, want);
+            assert_eq!(changed, Some(chili));
+
+            Ok(())
+        }
+    }
+
+    spec! {
+        delete_recipe {
+            type Output = Result<(), Box<dyn std::error::Error>>;
+
+            case existing {
+                let mut repository = create_repository();
+                let lasagne = Recipe {
+                    title: "Lasagne".to_string(),
+                    preparation: "Du weist schon wie".to_string(),
+                    servings: 4,
+                    ingredients: vec![],
+                };
+                let id = repository.insert(&lasagne)?;
+            }
+
+            case missing {
+                let mut repository = create_repository();
+                let id = uuid::Uuid::new_v4();
+            }
+
+            repository.remove(&id)?;
+
+            let result = repository.get(&id)?;
+            assert_eq!(result, None);
+
+            Ok(())
+        }
+    }
+
     fn fill_with_testdata(repository: &mut impl Repository) {
         for ele in 0..100 {
             let recipe = Recipe {
@@ -307,7 +394,7 @@ mod test {
                 ingredients: vec![],
             };
 
-            _ = repository.insert(&recipe);
+            _ = repository.insert(&recipe).unwrap();
         }
     }
 

@@ -18,7 +18,10 @@ fn create_repository() -> impl Repository {
 
 #[cfg(all(not(feature = "ephemeral"), feature = "mongodb"))]
 fn create_repository() -> impl Repository {
-    recipers::repository::mongodb::MongoDbClient {}
+    let result = recipers::repository::mongodb::MongoDbClient::new();
+    let client = result.unwrap();
+    client.collection.drop(None).expect("db must be empty");
+    client
 }
 
 #[tokio::main]
@@ -103,6 +106,7 @@ mod test {
     #[tokio::test]
     async fn get_toc_empty() -> TestResult {
         let repository = create_repository();
+
         let mut testbed = Testbed::with_repository(Box::new(repository));
 
         testbed
@@ -114,7 +118,11 @@ mod test {
             .await?
             .then()
             .status(StatusCode::OK)?
-            .body(&TableOfContents::empty())
+            // .body(&TableOfContents::empty())
+            .body(&crate::handler::TableOfContents {
+                total: 0,
+                content: vec![],
+            })
             .await?;
 
         // Der Response Body darf nur einmal gelesen werden, sonst
@@ -287,7 +295,7 @@ mod test {
             match self.state.read() {
                 Ok(_lock) => {
                     let _rec = _lock.get(id)?;
-                    Ok(_rec.cloned())
+                    Ok(_rec.clone())
                 }
                 Err(_err) => Err(Box::new(FatalTestError {})),
             }

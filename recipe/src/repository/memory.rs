@@ -56,6 +56,7 @@ impl super::Repository for Repository {
 
         tracing::debug!("Got range {:?}", range);
 
+        // normalize
         let xrange = if summaries.len() == 0 {
             (Bound::Unbounded, Bound::Unbounded)
         } else {
@@ -81,8 +82,11 @@ impl super::Repository for Repository {
         })
     }
 
-    fn get(&self, id: &Uuid) -> Result<Option<&Recipe>, RepositoryError> {
-        Ok(self.entries.get(&id))
+    fn get(&self, id: &Uuid) -> Result<Option<Recipe>, RepositoryError> {
+        if let Some(recipe) = self.entries.get(&id) {
+            return Ok(Some(recipe.clone()));
+        }
+        Ok(None)
     }
 
     fn remove(&mut self, id: &Uuid) -> Result<(), RepositoryError> {
@@ -90,8 +94,8 @@ impl super::Repository for Repository {
         Ok(())
     }
 
-    fn update(&mut self, id: &Uuid, recipe: Recipe) -> Result<UpdateResult, RepositoryError> {
-        match self.entries.insert(*id, recipe) {
+    fn update(&mut self, id: &Uuid, recipe: &Recipe) -> Result<UpdateResult, RepositoryError> {
+        match self.entries.insert(*id, recipe.clone()) {
             Some(_) => Ok(UpdateResult::Changed),
             None => Ok(UpdateResult::Created),
         }
